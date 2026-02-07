@@ -20,6 +20,21 @@ export interface SimulationStage {
   reality?: string;
 }
 
+export interface EssayData {
+  title: string;
+  intro: string;
+  body: string;
+}
+
+export interface DownloadableResource {
+  title: string;
+  description: string;
+  type: 'pdf' | 'excel' | 'doc';
+  triggerType: 'ad' | 'link'; // 'ad': Watch Video, 'link': Coupang/Affiliate
+  triggerUrl?: string; // Required if triggerType is 'link'
+  fileUrl?: string; // The actual file link (can be dummy for now)
+}
+
 export interface ScenarioData {
   success: number;
   salary: string;
@@ -38,11 +53,13 @@ export interface ScenarioData {
       value: string;
     }[];
   };
+  essay: EssayData;
+  downloads: DownloadableResource[]; // New field for PDF resources
 }
 
 export interface ScenarioTemplate {
   id: string;
-  type: 'report' | 'essay'; // Distinguished styles
+  type: 'report' | 'essay'; 
   tags: string[]; 
   story: {
     titleTemplate: string;
@@ -54,6 +71,24 @@ export interface ScenarioTemplate {
       { label: string; title: string; content: Partial<SimulationStage> }
     ];
   };
+  resultTable?: {
+    item: string;
+    before: string; 
+    after: string;  
+    diff: string;   
+  }[];
+  essay?: {
+    title: string;
+    intro: string;
+    body: string;
+  };
+  downloads?: { // Template for downloads
+    title: string;
+    description: string;
+    type: 'pdf' | 'excel' | 'doc';
+    triggerType: 'ad' | 'link';
+    triggerUrl?: string;
+  }[];
 }
 
 export interface ScenarioDB {

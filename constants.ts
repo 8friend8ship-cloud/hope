@@ -75,7 +75,33 @@ export const DEFAULT_TEMPLATES: ScenarioTemplate[] = [
           }
         }
       ]
-    }
+    },
+    resultTable: [
+      { item: '월 생활비', before: 'SGD 5,500', after: 'SGD 3,800', diff: '-1,700' },
+      { item: '자산 가치', before: 'SGD 850K', after: 'SGD 1.02M', diff: '+20%' },
+      { item: '의료비', before: '보험 적용', after: '사립 병원비', diff: '+SGD 200/월' },
+      { item: '스트레스', before: '고비용 압박', after: '언어 장벽', diff: '종류 변화' }
+    ],
+    essay: {
+      title: "낙원은 가성비의 영역이 아니다",
+      intro: "{start}에서 {goal}로 이동하는 것은 단순히 위도와 경도를 바꾸는 일이 아닙니다. 당신은 '고효율 스트레스'를 '저효율 낭만'으로 맞바꾸려 하고 있습니다. 많은 이들이 {currency} 환율 계산기를 두드리며 이민을 결심하지만, 정작 그들을 무너뜨리는 건 숫자가 아닙니다.",
+      body: "통장에 찍히는 생활비 잔액은 분명 늘어날 것입니다. 하지만 당신이 간과한 비용이 있습니다. \n\n첫째, '무능력자가 되는 경험'의 비용입니다. {start}에서 당신은 언어와 문화의 주인이었지만, {goal}에서는 은행 계좌 하나를 여는 데 3주를 소비하는 이방인일 뿐입니다. 그 자괴감의 비용은 엑셀 시트에 없습니다.\n\n둘째, '느림의 미학'이 주는 폭력성입니다. 여행자로 방문했을 때의 여유로움은 거주자가 되었을 때 무책임한 행정 처리로 돌변합니다. 당신의 한국식 '빨리빨리' 유전자는 매일 현지의 느긋함과 충돌하며 염증 반응을 일으킬 것입니다.\n\n결국 이민은 돈을 아끼러 가는 곳이 아니라, 불편함을 돈 주고 사러 가는 행위입니다. 그 불편함 속에서 새로운 나를 발견할 준비가 되지 않았다면, 당신의 낙원은 곧 지옥이 될 것입니다."
+    },
+    downloads: [
+      {
+        title: "포르투갈 D7 비자 서류 체크리스트 2026",
+        description: "대사관 반려 사유 1위 항목 포함, 필수 준비 서류 12종 완벽 정리",
+        type: "pdf",
+        triggerType: "ad"
+      },
+      {
+        title: "리스본/알가르베 한 달 살기 예산표",
+        description: "현지 마트 물가, 공과금, 월세 실수령액 엑셀 계산기",
+        type: "excel",
+        triggerType: "link",
+        triggerUrl: "https://www.coupang.com/vp/products/example" // Example Coupang Link
+      }
+    ]
   },
 
   // 2. BUSAN -> BALI (Report Style)
@@ -126,7 +152,33 @@ export const DEFAULT_TEMPLATES: ScenarioTemplate[] = [
           }
         }
       ]
-    }
+    },
+    resultTable: [
+      { item: '월 주거비', before: '220만 원', after: '145만 원', diff: '-75만' },
+      { item: '교육비', before: '공교육', after: '홈스쿨링', diff: '+부모 노동' },
+      { item: '순자산', before: '1.8억', after: '2.98억', diff: '+1.18억' },
+      { item: '삶의 질', before: '경쟁 압박', after: '인프라 부족', diff: '등가 교환' }
+    ],
+    essay: {
+      title: "디지털 노마드라는 이름의 난민",
+      intro: "노트북 하나 들고 해변에서 일하는 삶. 인스타그램이 만들어낸 21세기의 가장 달콤한 사기극입니다. {start}의 빌딩 숲을 탈출해 {goal}의 정글로 들어가는 당신은 스스로를 '개척자'라 부르겠지만, 현지인들의 눈에는 그저 '환율 차익을 노리는 뜨내기'일 뿐입니다.",
+      body: "진짜 문제는 '자유'의 무게입니다. {start}에서는 회사가 당신의 시간을 통제했지만, {goal}에서는 당신이 스스로를 통제해야 합니다. 그리고 대부분의 현대인은 그 자유를 감당하지 못합니다. \n\n느린 인터넷 속도, 끊기는 전기, 눅눅한 침대 시트는 낭만이 아니라 생존의 문제입니다. 당신은 '일'과 '휴식'의 경계가 무너진 채, 싼 물가에 취해 서서히 게을러지는 자신을 발견하게 될 것입니다. \n\n도피성 이주에 성공은 없습니다. 당신이 {start}에서 해결하지 못한 내면의 문제는 비행기를 탄다고 사라지지 않습니다. 수하물처럼 당신을 따라와 {goal}의 풀빌라 옆자리에 누워있을 것입니다."
+    },
+    downloads: [
+      {
+        title: "발리 장기 거주 비자(KITAS/B211) 가이드",
+        description: "최신 비자 정책 변화 및 대행사 사기 피하는 법",
+        type: "pdf",
+        triggerType: "ad"
+      },
+      {
+        title: "디지털 노마드 필수 장비 추천 리스트",
+        description: "현지 인터넷 환경을 극복하는 공유기 및 파워뱅크",
+        type: "pdf",
+        triggerType: "link",
+        triggerUrl: "https://www.coupang.com/vp/products/example"
+      }
+    ]
   },
 
   // 3. GANGNAM DEBT (Report Style)
@@ -177,7 +229,33 @@ export const DEFAULT_TEMPLATES: ScenarioTemplate[] = [
           }
         }
       ]
-    }
+    },
+    resultTable: [
+      { item: '월 고정지출', before: '250만 원', after: '487만 원', diff: '+237만' },
+      { item: '순부채', before: '0원', after: '1.8억 원', diff: '+1.8억' },
+      { item: '자산 가치', before: '3억 (전세)', after: '12억 (자가)', diff: '+9억' },
+      { item: '현금 흐름', before: '+150만/월', after: '-30만/월', diff: '적자 전환' }
+    ],
+    essay: {
+      title: "콘크리트 카스트 제도의 수감자들",
+      intro: "{goal} 아파트는 단순한 거주 공간이 아닙니다. 그것은 대한민국이라는 계급 사회의 신분증이자, 당신의 노후를 담보로 한 가장 비싼 도박입니다. 당신은 등기권리증을 얻었지만, 그 대가로 '오늘의 행복'을 은행에 저당 잡혔습니다.",
+      body: "매일 아침 눈을 뜰 때마다 18만 원의 이자가 숨만 쉬어도 사라집니다. 이것은 집이 당신을 보호하는 것이 아니라, 당신이 집을 모시고 사는 꼴입니다. \n\n이웃들은 경쟁자이고, 아이 친구의 부모는 정보원입니다. {goal}의 화려한 인프라는 돈 없이는 그림의 떡이며, 당신은 그 인프라를 누리기 위해 주말 밤 대리운전을 합니다. \n\n자산 가치는 올랐다고요? 팔아서 실현하지 않는 한 그것은 사이버 머니에 불과합니다. 당신은 부자가 된 것이 아니라, 12억짜리 감옥의 모범수가 된 것입니다. 탈옥은 불가능합니다. 밖은 더 춥거든요."
+    },
+    downloads: [
+      {
+        title: "영끌 대출 상환 시뮬레이터 (Excel)",
+        description: "금리 인상 시 월 상환액 변화 및 파산 임계점 계산",
+        type: "excel",
+        triggerType: "ad"
+      },
+      {
+        title: "학군지 진입 전 필독: 숨겨진 비용 보고서",
+        description: "사교육비, 품위유지비, 셔틀비 등 현실 비용 총정리",
+        type: "pdf",
+        triggerType: "link",
+        triggerUrl: "https://www.coupang.com/vp/products/example"
+      }
+    ]
   }
 ];
 

@@ -1,7 +1,7 @@
 
-import React, { useRef } from 'react';
+import React, { useRef, useState } from 'react';
 import { GlassCard } from './GlassCard';
-import { StoryResult, SimulationStage } from '../types';
+import { StoryResult, SimulationStage, DownloadableResource } from '../types';
 import html2canvas from 'html2canvas';
 import { jsPDF } from 'jspdf';
 
@@ -98,8 +98,84 @@ const ReportCard: React.FC<{ stage: SimulationStage }> = ({ stage }) => (
   </div>
 );
 
+const ResourceCard: React.FC<{ resource: DownloadableResource }> = ({ resource }) => {
+  const [unlocked, setUnlocked] = useState(false);
+  const [loading, setLoading] = useState(false);
+
+  const handleTrigger = () => {
+    if (resource.triggerType === 'ad') {
+      setLoading(true);
+      setTimeout(() => {
+        setLoading(false);
+        setUnlocked(true);
+      }, 3000); // Simulate 3s Ad
+    } else if (resource.triggerType === 'link' && resource.triggerUrl) {
+      window.open(resource.triggerUrl, '_blank');
+      setUnlocked(true);
+    }
+  };
+
+  const handleDownload = () => {
+    // In a real app, this would be the file URL.
+    // For demo, we create a dummy text file.
+    const element = document.createElement("a");
+    const file = new Blob([`[HOPE PLATFORM] ${resource.title}\n\n${resource.description}\n\nThis is a sample file content for demonstration.`], {type: 'text/plain'});
+    element.href = URL.createObjectURL(file);
+    element.download = `${resource.title.replace(/\s+/g, '_')}.txt`;
+    document.body.appendChild(element); // Required for this to work in FireFox
+    element.click();
+    document.body.removeChild(element);
+  };
+
+  return (
+    <div className="bg-white rounded-xl p-4 md:p-5 border border-gray-200 shadow-sm hover:shadow-md transition-all flex flex-col h-full relative overflow-hidden group">
+      {/* Icon & Type */}
+      <div className="flex justify-between items-start mb-3">
+         <div className={`w-10 h-10 rounded-lg flex items-center justify-center text-lg font-bold text-white ${resource.type === 'excel' ? 'bg-green-600' : 'bg-red-500'}`}>
+            {resource.type === 'excel' ? 'X' : 'P'}
+         </div>
+         <div className="text-[10px] uppercase font-bold text-gray-400 bg-gray-100 px-2 py-1 rounded">
+            {resource.triggerType === 'ad' ? 'AD Free' : 'Affiliate'}
+         </div>
+      </div>
+
+      <h4 className="font-bold text-gray-900 leading-tight mb-2 text-sm">{resource.title}</h4>
+      <p className="text-xs text-gray-500 mb-4 flex-1">{resource.description}</p>
+
+      {/* Lock Overlay */}
+      {!unlocked ? (
+        <button 
+          onClick={handleTrigger}
+          disabled={loading}
+          className="w-full mt-auto py-2.5 rounded-lg bg-gray-900 hover:bg-gray-800 text-white text-xs font-bold transition-colors flex items-center justify-center gap-2"
+        >
+          {loading ? (
+             <>
+               <div className="w-3 h-3 border-2 border-white/30 border-t-white rounded-full animate-spin"></div>
+               광고 로딩중...
+             </>
+          ) : resource.triggerType === 'ad' ? (
+             <><span>📺</span> 광고 보고 받기</>
+          ) : (
+             <><span>🔗</span> 최저가 확인 후 받기</>
+          )}
+        </button>
+      ) : (
+        <button 
+          onClick={handleDownload}
+          className="w-full mt-auto py-2.5 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold transition-colors animate-pulse"
+        >
+          ⬇️ 지금 다운로드
+        </button>
+      )}
+    </div>
+  );
+};
+
 export const ResultSection: React.FC<ResultSectionProps> = ({ result, loading }) => {
   const contentRef = useRef<HTMLDivElement>(null);
+  const [isEssayUnlocked, setIsEssayUnlocked] = useState(false);
+  const [isAdPlaying, setIsAdPlaying] = useState(false);
 
   if (loading) {
     return (
@@ -123,7 +199,16 @@ export const ResultSection: React.FC<ResultSectionProps> = ({ result, loading })
   if (!result) return null;
 
   const { scenarioData, userInput, timestamp } = result;
-  const { story } = scenarioData;
+  const { story, essay, downloads } = scenarioData;
+
+  const handleUnlockEssay = () => {
+    setIsAdPlaying(true);
+    // Simulate Video Ad Duration (3 seconds)
+    setTimeout(() => {
+      setIsAdPlaying(false);
+      setIsEssayUnlocked(true);
+    }, 3000);
+  };
 
   return (
     <div className="space-y-6 animate-fade-in-up h-full">
@@ -212,6 +297,72 @@ export const ResultSection: React.FC<ResultSectionProps> = ({ result, loading })
                     ))}
                 </div>
             </div>
+        </div>
+
+        {/* Dry Author's Essay Section */}
+        <div className="mt-12 pt-8 border-t border-white/10">
+          <div className="bg-[#fffcf0] text-gray-800 p-8 rounded-xl shadow-2xl relative overflow-hidden font-serif">
+             {/* Paper Texture Overlay */}
+             <div className="absolute inset-0 opacity-[0.03] bg-[url('https://www.transparenttextures.com/patterns/cream-paper.png')]"></div>
+             
+             <div className="relative z-10">
+                <div className="flex items-center gap-3 mb-6">
+                   <div className="w-10 h-10 rounded-full bg-gray-800 flex items-center justify-center text-white font-black text-xl">✒️</div>
+                   <div>
+                      <h4 className="text-xs font-bold uppercase tracking-widest text-gray-500">Dry Columnist</h4>
+                      <h3 className="text-xl md:text-2xl font-bold text-gray-900 leading-tight">{essay.title}</h3>
+                   </div>
+                </div>
+
+                <div className="space-y-4 text-lg leading-relaxed text-gray-700">
+                   <p className="font-medium">{essay.intro}</p>
+                   
+                   {isEssayUnlocked ? (
+                      <div className="animate-fade-in space-y-4">
+                         {essay.body.split('\n\n').map((paragraph, i) => (
+                           <p key={i}>{paragraph}</p>
+                         ))}
+                         <div className="mt-8 pt-6 border-t border-gray-200 text-center">
+                            <p className="text-sm text-gray-500 italic">"준비되지 않은 희망은, 절망보다 잔인하다."</p>
+                         </div>
+                      </div>
+                   ) : (
+                      <div className="relative mt-4 p-6 bg-gray-100 rounded-xl text-center border border-gray-200">
+                         {isAdPlaying ? (
+                            <div className="flex flex-col items-center gap-3">
+                               <div className="w-8 h-8 border-4 border-gray-300 border-t-gray-800 rounded-full animate-spin"></div>
+                               <p className="text-sm font-bold text-gray-600">스폰서 광고 재생 중 (3초)...</p>
+                            </div>
+                         ) : (
+                            <div className="space-y-3">
+                               <p className="text-sm text-gray-600">이후 내용은 현실적인 조언과 비판을 포함하고 있습니다.</p>
+                               <button 
+                                 onClick={handleUnlockEssay}
+                                 className="px-6 py-3 bg-gray-900 text-white font-bold rounded-lg hover:bg-gray-700 transition-colors shadow-lg flex items-center justify-center gap-2 mx-auto w-full md:w-auto"
+                               >
+                                  <span>📺</span> 동영상 광고 보고 계속 읽기
+                               </button>
+                            </div>
+                         )}
+                      </div>
+                   )}
+                </div>
+
+                {/* Premium Downloads Grid */}
+                {downloads && downloads.length > 0 && (
+                  <div className="mt-8 pt-6 border-t border-gray-200/50">
+                    <p className="text-[10px] text-gray-400 font-sans uppercase tracking-widest mb-4">
+                       Premium Resources (준비물)
+                    </p>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 font-sans">
+                        {downloads.map((resource, idx) => (
+                           <ResourceCard key={idx} resource={resource} />
+                        ))}
+                    </div>
+                  </div>
+                )}
+             </div>
+          </div>
         </div>
 
       </div>

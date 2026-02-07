@@ -8,7 +8,7 @@ import { ActionButtons } from './components/ActionButtons';
 import { Toast } from './components/Toast';
 import { AdminDashboard } from './components/AdminDashboard';
 import { INITIAL_DB, RANDOM_SCENARIOS, GLOBAL_100, detectCountry, DEFAULT_TEMPLATES } from './constants';
-import { UserInput, StoryResult, ScenarioDB, ScenarioData, ScenarioTemplate } from './types';
+import { UserInput, StoryResult, ScenarioDB, ScenarioData, ScenarioTemplate, ComparisonRow, EssayData, DownloadableResource } from './types';
 import { GlassCard } from './components/GlassCard';
 
 function App() {
@@ -73,8 +73,7 @@ function App() {
       const config = GLOBAL_100[countryKey] || GLOBAL_100['default'];
 
       // 2. Select Template Logic (Exact Matching Priority)
-      // Note: Now using the dynamic `templates` state instead of hardcoded constants
-      let selectedTemplate = templates[0]; // Default
+      let selectedTemplate = templates[0]; // Default fallback
       
       const jobLower = job.toLowerCase();
       const goalLower = goal.toLowerCase();
@@ -121,6 +120,48 @@ function App() {
 
       const randInt = (min: number, max: number) => Math.floor(Math.random() * (max - min + 1)) + min;
       
+      // 4. Generate Result Table (Dynamic or from Template)
+      let resultTable: ComparisonRow[] = [];
+      
+      if (selectedTemplate.resultTable) {
+        // Use template-specific table if available
+        resultTable = selectedTemplate.resultTable.map(row => ({
+          item: inject(row.item),
+          before: inject(row.before),
+          after: inject(row.after),
+          diff: inject(row.diff)
+        }));
+      } else {
+        // Fallback Default Logic
+        resultTable = [
+            { item: '월 생활비', before: `${config.currency} 4,500`, after: `${config.currency} 3,200`, diff: `-1,300` },
+            { item: '자산', before: '유동성 부족', after: '환차익 발생', diff: `+${randInt(1, 15)}%` },
+            { item: '의료비', before: '보험 적용', after: '사립 병원', diff: '+200%' },
+            { item: '순 저축', before: '100', after: '350', diff: '+250' }
+        ];
+      }
+
+      // 5. Generate Essay (Dynamic)
+      const defaultEssay: EssayData = {
+        title: `${goal}의 현실: 숫자가 말해주지 않는 것들`,
+        intro: `${start}를 떠나 ${goal}로 향하는 당신의 발걸음은 가볍겠지만, 현실의 무게는 결코 가볍지 않습니다.`,
+        body: "우리는 종종 장소만 바뀌면 삶이 바뀔 것이라 착각합니다. 하지만 당신이 가져가는 것은 짐가방뿐만이 아닙니다. 당신의 불안과 습관도 국경을 넘습니다."
+      };
+
+      const essayData: EssayData = selectedTemplate.essay ? {
+        title: inject(selectedTemplate.essay.title),
+        intro: inject(selectedTemplate.essay.intro),
+        body: inject(selectedTemplate.essay.body)
+      } : defaultEssay;
+
+      // 6. Generate Downloads (Dynamic)
+      const downloads: DownloadableResource[] = selectedTemplate.downloads ? selectedTemplate.downloads.map(d => ({
+        ...d,
+        title: inject(d.title),
+        description: inject(d.description),
+        triggerUrl: inject(d.triggerUrl)
+      })) : [];
+
       const scenarioData: ScenarioData = {
           success: randInt(40, 95),
           salary: config.avgSalary,
@@ -143,12 +184,7 @@ function App() {
                 reality: inject(s.content.reality),
               })) as [any, any, any, any]
           },
-          resultTable: [
-              { item: '월 생활비', before: `${config.currency} 4,500`, after: `${config.currency} 3,200`, diff: `-1,300` },
-              { item: '자산', before: '유동성 부족', after: '환차익 발생', diff: `+${randInt(1, 15)}%` },
-              { item: '의료비', before: '보험 적용', after: '사립 병원', diff: '+200%' },
-              { item: '순 저축', before: '100', after: '350', diff: '+250' }
-          ],
+          resultTable: resultTable,
           additionalInfo: {
               obstacles: ['EU 규제 강화', '환율 변동', '언어 장벽'],
               nextSteps: [
@@ -156,7 +192,9 @@ function App() {
                   { label: '유튜브', value: `${goal} 골든비자 폐지 후 대안` },
                   { label: 'PDF 다운로드', value: `${goal} NIF + 부동산세 가이드` }
               ]
-          }
+          },
+          essay: essayData,
+          downloads: downloads
       };
 
       // Set Title dynamically
