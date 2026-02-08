@@ -1,13 +1,14 @@
 
 import React, { useRef, useState } from 'react';
 import { GlassCard } from './GlassCard';
-import { StoryResult, SimulationStage, DownloadableResource } from '../types';
+import { StoryResult, SimulationStage, DownloadableResource, StandaloneEssay } from '../types';
 import html2canvas from 'html2canvas';
 import { jsPDF } from 'jspdf';
 
 interface ResultSectionProps {
   result: StoryResult | null;
   loading: boolean;
+  extraEssays?: StandaloneEssay[]; // Add support for DB essays
 }
 
 export const downloadPDFElement = async (elementId: string, fileName: string) => {
@@ -172,10 +173,11 @@ const ResourceCard: React.FC<{ resource: DownloadableResource }> = ({ resource }
   );
 };
 
-export const ResultSection: React.FC<ResultSectionProps> = ({ result, loading }) => {
+export const ResultSection: React.FC<ResultSectionProps> = ({ result, loading, extraEssays }) => {
   const contentRef = useRef<HTMLDivElement>(null);
   const [isEssayUnlocked, setIsEssayUnlocked] = useState(false);
   const [isAdPlaying, setIsAdPlaying] = useState(false);
+  const [expandedEssayId, setExpandedEssayId] = useState<string | null>(null);
 
   if (loading) {
     return (
@@ -198,8 +200,9 @@ export const ResultSection: React.FC<ResultSectionProps> = ({ result, loading })
 
   if (!result) return null;
 
-  const { scenarioData, userInput, timestamp } = result;
-  const { story, essay, downloads } = scenarioData;
+  const { scenarioData, userInput, timestamp, isDefault } = result;
+  const { story, essay, downloads, visa, visaInfoUrl } = scenarioData;
+  const { goal } = userInput;
 
   const handleUnlockEssay = () => {
     setIsAdPlaying(true);
@@ -233,6 +236,11 @@ export const ResultSection: React.FC<ResultSectionProps> = ({ result, loading })
             <div className="text-lg md:text-xl text-gray-400 font-light italic">
                 {story.subHeader}
             </div>
+            {isDefault && userInput.goal && userInput.goal !== '미지정' && (
+              <div className="mt-4 p-4 bg-yellow-500/10 border border-yellow-500/20 rounded-lg text-yellow-200 text-sm">
+                  <span className="font-bold">⚠️ 주의:</span> '{userInput.goal}'에 대한 상세 데이터가 없어, 가장 유사한 일반 시나리오로 대체하여 생성되었습니다. 비자, 물가 등은 참고용으로만 확인해주세요.
+              </div>
+            )}
         </div>
 
         {/* Stages Timeline */}
@@ -298,6 +306,31 @@ export const ResultSection: React.FC<ResultSectionProps> = ({ result, loading })
                 </div>
             </div>
         </div>
+        
+        {/* Official Visa Info Section */}
+        {visaInfoUrl && (
+          <div className="mt-12 pt-8 border-t border-white/10">
+            <GlassCard className="p-6 flex flex-col md:flex-row items-center gap-6 bg-gradient-to-r from-blue-500/10 to-transparent border-blue-500/20">
+              <div className="text-5xl">🏢</div>
+              <div className="flex-1 text-center md:text-left">
+                <h3 className="text-xl font-bold text-white mb-1">공식 비자 정보 확인</h3>
+                <p className="text-sm text-gray-300">
+                  가장 정확한 최신 정보는 <span className="font-bold text-blue-300">{goal}</span> 정부 공식 사이트에서 확인해야 합니다.
+                  <br/>
+                  예상 비자 타입: <span className="font-semibold text-white">{visa}</span>
+                </p>
+              </div>
+              <a 
+                href={visaInfoUrl} 
+                target="_blank" 
+                rel="noopener noreferrer"
+                className="px-6 py-3 bg-blue-600 hover:bg-blue-500 text-white font-bold rounded-xl transition-colors shadow-lg shadow-blue-900/50 flex items-center gap-2 whitespace-nowrap"
+              >
+                공식 사이트 바로가기 ↗
+              </a>
+            </GlassCard>
+          </div>
+        )}
 
         {/* Dry Author's Essay Section */}
         <div className="mt-12 pt-8 border-t border-white/10">
@@ -325,13 +358,47 @@ export const ResultSection: React.FC<ResultSectionProps> = ({ result, loading })
                          <div className="mt-8 pt-6 border-t border-gray-200 text-center">
                             <p className="text-sm text-gray-500 italic">"준비되지 않은 희망은, 절망보다 잔인하다."</p>
                          </div>
+                         
+                         {/* Recommended Columns - Integrated Inside Essay Unlocked View */}
+                         {extraEssays && extraEssays.length > 0 && (
+                            <div className="mt-8 bg-gray-50 border border-gray-200 rounded-lg p-5 text-left">
+                                <h5 className="font-bold text-sm text-gray-500 uppercase mb-3 flex items-center gap-2">
+                                    <span>📚</span> 건조한 작가의 다른 글 (Recommended Columns)
+                                </h5>
+                                <div className="space-y-3">
+                                    {extraEssays.map((essayItem) => (
+                                        <div key={essayItem.id} className="border-b border-gray-200 last:border-0 pb-3 last:pb-0">
+                                            <button 
+                                                onClick={() => setExpandedEssayId(expandedEssayId === essayItem.id ? null : essayItem.id)}
+                                                className="w-full text-left flex justify-between items-start hover:bg-gray-100 p-2 rounded transition-colors group"
+                                            >
+                                                <div>
+                                                    <div className="font-bold text-gray-800 group-hover:text-gray-900">{essayItem.title}</div>
+                                                    <div className="text-xs text-gray-500 mt-1">
+                                                        {essayItem.date} · {essayItem.tags.map(t => `#${t} `)}
+                                                    </div>
+                                                </div>
+                                                <span className="text-gray-400 text-xs mt-1">{expandedEssayId === essayItem.id ? '▲' : '▼'}</span>
+                                            </button>
+                                            
+                                            {expandedEssayId === essayItem.id && (
+                                                <div className="mt-2 p-3 bg-white border border-gray-100 rounded text-sm text-gray-700 whitespace-pre-line animate-fade-in">
+                                                    {essayItem.content}
+                                                </div>
+                                            )}
+                                        </div>
+                                    ))}
+                                </div>
+                            </div>
+                         )}
+
                       </div>
                    ) : (
                       <div className="relative mt-4 p-6 bg-gray-100 rounded-xl text-center border border-gray-200">
                          {isAdPlaying ? (
                             <div className="flex flex-col items-center gap-3">
-                               <div className="w-8 h-8 border-4 border-gray-300 border-t-gray-800 rounded-full animate-spin"></div>
-                               <p className="text-sm font-bold text-gray-600">스폰서 광고 재생 중 (3초)...</p>
+                                <div className="w-8 h-8 border-4 border-gray-300 border-t-gray-800 rounded-full animate-spin"></div>
+                                <p className="text-sm font-bold text-gray-600">스폰서 광고 재생 중 (3초)...</p>
                             </div>
                          ) : (
                             <div className="space-y-3">

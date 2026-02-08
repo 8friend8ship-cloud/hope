@@ -7,7 +7,7 @@ import { INITIAL_DB, GLOBAL_100 } from '../constants';
 interface InputFormProps {
   input: UserInput;
   onChange: (field: keyof UserInput, value: string | number) => void;
-  onGenerate: () => void;
+  onGenerate: (parsedData: Partial<UserInput>, rawText?: string) => void;
   onRandom: () => void;
   onDownload: () => void;
   canDownload: boolean;
@@ -25,71 +25,63 @@ export const InputForm: React.FC<InputFormProps> = ({
 }) => {
   const [prompt, setPrompt] = useState('');
   
-  // Advanced Parsing Logic
+  // Basic Regex Parsing for immediate UI feedback (Client-side)
+  // The heavy lifting will be done by AI in App.tsx if rawText is passed
   const analyzeAndGenerate = () => {
-    if (!prompt.trim()) {
-      onRandom(); // Empty input triggers random
+    const trimmedPrompt = prompt.trim();
+    if (!trimmedPrompt) {
+      onRandom();
       return;
     }
 
-    let newAge = '';
-    let newStart = '';
-    let newGoal = '';
-    let newMonths = 36;
-    let newJob = '프리랜서';
+    const parsedData: Partial<UserInput> = {};
+    const text = trimmedPrompt;
 
-    const text = prompt;
-
-    // 1. Age (e.g., 53세, 53살, 20대)
+    // 1. Age
     const ageMatch = text.match(/(\d+)(?:세|살)/);
-    if (ageMatch) newAge = ageMatch[1];
+    if (ageMatch) parsedData.age = ageMatch[1];
 
-    // 2. Months/Years (e.g., 3년, 36개월)
+    // 2. Months/Years
     const yearMatch = text.match(/(\d+)(?:년)/);
     const monthMatch = text.match(/(\d+)(?:개월|달)/);
-    if (yearMatch) newMonths = parseInt(yearMatch[1]) * 12;
-    else if (monthMatch) newMonths = parseInt(monthMatch[1]);
+    if (yearMatch) parsedData.months = parseInt(yearMatch[1]) * 12;
+    else if (monthMatch) parsedData.months = parseInt(monthMatch[1]);
+    
+    // 3. Start & Goal
+    let newStart: string | undefined;
+    let newGoal: string | undefined;
 
-    // 3. Country/City Detection (Goal)
-    // Scan Global 100 DB first
-    for (const [key, config] of Object.entries(GLOBAL_100)) {
-        if (text.includes(key) || config.cities.some(c => text.includes(c))) {
-            newGoal = key; // Set country key as goal initially for logic
-            // Try to find specific city in text
-            const city = config.cities.find(c => text.includes(c));
-            if (city) newGoal = city;
-            break;
+    const directionMatch = text.match(/([가-힣a-zA-Z\s]+?)(?:에서|부터| 떠나서)\s*([가-힣a-zA-Z\s]+?)(?:(?:으?로)|(?:에))/);
+    if (directionMatch) {
+      newStart = directionMatch[1].trim();
+      newGoal = directionMatch[2].trim();
+    } else {
+      // Simple fallback logic
+      newStart = '한국'; 
+      for (const [key, config] of Object.entries(GLOBAL_100)) {
+        const city = config.cities.find(c => text.includes(c));
+        if (city) {
+          newGoal = city;
+          break;
         }
-    }
-    // Fallback regex for "Start -> Goal" structure
-    if (!newGoal) {
-        // "Seoul to New York", "서울에서 뉴욕으로"
-        const directionMatch = text.match(/([가-힣a-zA-Z]+)(?:에서|부터)\s*([가-힣a-zA-Z]+)(?:(?:으?로)|(?:에))/);
-        if (directionMatch) {
-            newStart = directionMatch[1];
-            newGoal = directionMatch[2];
-        } else {
-             // Simple "Goal" extraction context
-             const goalMatch = text.match(/([가-힣a-zA-Z]+)(?:(?:으?로)|(?:에))\s*(?:이민|이주|가고|살고)/);
-             if (goalMatch) newGoal = goalMatch[1];
+        if (text.includes(key)) {
+          newGoal = config.cities[0] || key;
+          break;
         }
+      }
     }
 
-    // 4. Job Detection (Simple Keyword)
-    const jobs = ['개발자', '디자이너', '용접공', '간호사', '요리사', '사업', '은퇴', '유학', '주재원', '인테리어', '자영업'];
+    if (newStart) parsedData.start = newStart;
+    if (newGoal) parsedData.goal = newGoal;
+
+    // 4. Job
+    const jobs = ['개발자', '디자이너', '용접공', '간호사', '요리사', '사업', '은퇴', '유학', '주재원', '인테리어', '자영업', '프리랜서', '가장', '업자'];
     const foundJob = jobs.find(j => text.includes(j));
-    if (foundJob) newJob = foundJob;
+    if (foundJob) parsedData.job = foundJob;
 
-    // Update State
-    if (newAge) onChange('age', newAge);
-    if (newStart) onChange('start', newStart);
-    else onChange('start', '한국'); // Default start
-    if (newGoal) onChange('goal', newGoal);
-    if (newJob) onChange('job', newJob);
-    onChange('months', newMonths);
-
-    // Trigger Generation
-    setTimeout(onGenerate, 100);
+    // Pass both the regex-parsed data AND the raw text for AI analysis
+    onGenerate(parsedData, trimmedPrompt);
+    setPrompt('');
   };
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
@@ -118,7 +110,7 @@ export const InputForm: React.FC<InputFormProps> = ({
             onChange={(e) => setPrompt(e.target.value)}
             onKeyDown={handleKeyDown}
             className="w-full bg-transparent text-white text-lg md:text-xl font-medium placeholder-gray-600 focus:outline-none resize-none h-24 leading-relaxed"
-            placeholder="예) 53세 인테리어 업자인데 한국 떠나서 오스트리아 빈으로 이민가고 싶어. 3년 정도 생각중이야."
+            placeholder="예) 40세, 아내랑 아이 둘 데리고 캐나다 밴쿠버 이민 가고 싶어. 자산은 3억 정도."
           />
 
           <div className="flex justify-between items-center pt-2 border-t border-white/5">

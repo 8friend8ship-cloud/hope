@@ -54,7 +54,8 @@ export interface ScenarioData {
     }[];
   };
   essay: EssayData;
-  downloads: DownloadableResource[]; // New field for PDF resources
+  downloads: DownloadableResource[];
+  visaInfoUrl: string; // New field for official visa link
 }
 
 export interface ScenarioTemplate {
@@ -91,6 +92,14 @@ export interface ScenarioTemplate {
   }[];
 }
 
+export interface StandaloneEssay {
+  id: string;
+  title: string;
+  content: string;
+  tags: string[];
+  date: string;
+}
+
 export interface ScenarioDB {
   rates: { [key: string]: number };
   scenarios: { [key: string]: ScenarioData };
@@ -100,6 +109,8 @@ export interface ScenarioDB {
     details: string;
     timestamp: string;
   }>;
+  randomSamples: Partial<UserInput>[];
+  essays: StandaloneEssay[]; // New field for managing independent columns
 }
 
 export interface UserInput {
@@ -109,6 +120,13 @@ export interface UserInput {
   goal: string;
   months: number;
   country?: string;
+  forcedTemplateId?: string; // 특정 템플릿 강제 지정
+  // AI Deep Analysis Fields
+  family?: string; // e.g., "Single", "Married with 2 kids"
+  moveType?: string; // e.g., "Immigration", "Study", "1 Month Stay", "Work"
+  assets?: string; // e.g., "1억", "Low budget"
+  isDomestic?: boolean; // True if start and goal are in the same country
+  useAI?: boolean; // Explicit flag: If true, ignore templates and generate new one
 }
 
 export interface StoryResult {
@@ -117,6 +135,7 @@ export interface StoryResult {
   progress: number;
   userInput: UserInput;
   timestamp: string;
+  isDefault?: boolean;
 }
 
 export interface CountryConfig {
@@ -127,4 +146,5 @@ export interface CountryConfig {
   cities: string[];
   visaName: string;
   avgSalary: string;
+  visaInfoUrl: string; // New field for official visa link
 }

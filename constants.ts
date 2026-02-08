@@ -3,14 +3,14 @@ import { ScenarioDB, UserInput, CountryConfig, ScenarioTemplate } from './types'
 
 // --- GLOBAL MASTER DATASET ---
 export const GLOBAL_100: Record<string, CountryConfig> = {
-  korea: { code: 'ko', currency: '₩', bank: 'SC제일', prop: '직방', cities: ['강남','판교','용인','부산','서울','의정부','수원'], visaName: '거주비자', avgSalary: '4,500만원' },
-  thailand: { code: 'th', currency: '฿', bank: 'Kasikorn', prop: 'DDproperty', cities: ['방콕','치앙마이','푸켓'], visaName: 'Elite Visa', avgSalary: '฿80만' },
-  indonesia: { code: 'id', currency: 'Rp', bank: 'BCA', prop: 'Rumah123', cities: ['자카르타','발리','우붓'], visaName: 'KITAS', avgSalary: 'Rp2.4억' },
-  singapore: { code: 'en', currency: 'SGD', bank: 'DBS', prop: 'PropertyGuru', cities: ['싱가포르','센토사'], visaName: 'EP', avgSalary: 'SGD 8.4만' },
-  portugal: { code: 'pt', currency: '€', bank: 'Millennium', prop: 'Idealista', cities: ['리스본','포르투','알가르베'], visaName: 'D7 Visa', avgSalary: '€3.2만' },
-  usa: { code: 'en', currency: '$', bank: 'Chase', prop: 'Zillow', cities: ['뉴욕','LA','플로리다','텍사스','샌프란시스코','오하이오'], visaName: 'H1B/O1', avgSalary: '$8.5만' },
-  australia: { code: 'en', currency: 'A$', bank: 'CBA', prop: 'Realestate.com.au', cities: ['시드니','멜버른','브리즈번', '골드코스트'], visaName: 'TSS 482', avgSalary: 'A$9.2만' },
-  default: { code: 'en', currency: '$', bank: 'Global Bank', prop: 'Global Prop', cities: ['Global City'], visaName: 'Work Visa', avgSalary: '$50,000' }
+  korea: { code: 'ko', currency: '₩', bank: 'SC제일', prop: '직방', cities: ['강남','판교','용인','부산','서울','의정부','수원'], visaName: '거주비자', avgSalary: '4,500만원', visaInfoUrl: 'https://www.hikorea.go.kr' },
+  thailand: { code: 'th', currency: '฿', bank: 'Kasikorn', prop: 'DDproperty', cities: ['방콕','치앙마이','푸켓'], visaName: 'Elite Visa', avgSalary: '฿80만', visaInfoUrl: 'https://www.thaievisa.go.th/' },
+  indonesia: { code: 'id', currency: 'Rp', bank: 'BCA', prop: 'Rumah123', cities: ['자카르타','발리','우붓'], visaName: 'KITAS', avgSalary: 'Rp2.4억', visaInfoUrl: 'https://www.imigrasi.go.id/en/' },
+  singapore: { code: 'en', currency: 'SGD', bank: 'DBS', prop: 'PropertyGuru', cities: ['싱가포르','센토사'], visaName: 'EP', avgSalary: 'SGD 8.4만', visaInfoUrl: 'https://www.mom.gov.sg/passes-and-permits' },
+  portugal: { code: 'pt', currency: '€', bank: 'Millennium', prop: 'Idealista', cities: ['리스본','포르투','알가르베'], visaName: 'D7 Visa', avgSalary: '€3.2만', visaInfoUrl: 'https://vistos.mne.gov.pt/en/' },
+  usa: { code: 'en', currency: '$', bank: 'Chase', prop: 'Zillow', cities: ['뉴욕','LA','플로리다','텍사스','샌프란시스코','오하이오'], visaName: 'H1B/O1', avgSalary: '$8.5만', visaInfoUrl: 'https://www.uscis.gov/working-in-the-united-states' },
+  australia: { code: 'en', currency: 'A$', bank: 'CBA', prop: 'Realestate.com.au', cities: ['시드니','멜버른','브리즈번', '골드코스트'], visaName: 'TSS 482', avgSalary: 'A$9.2만', visaInfoUrl: 'https://immi.homeaffairs.gov.au/visas/working-in-australia' },
+  default: { code: 'en', currency: '$', bank: 'Global Bank', prop: 'Global Prop', cities: ['Global City'], visaName: 'Work Visa', avgSalary: '$50,000', visaInfoUrl: 'https://google.com/search?q=work+visa+information' }
 };
 
 export const detectCountry = (text: string): string => {
@@ -256,6 +256,61 @@ export const DEFAULT_TEMPLATES: ScenarioTemplate[] = [
         triggerUrl: "https://www.coupang.com/vp/products/example"
       }
     ]
+  },
+  // 4. DEFAULT (GENERIC) TEMPLATE
+  {
+    id: 'template_default',
+    type: 'report',
+    tags: ['default', 'generic'],
+    story: {
+      titleTemplate: "{age}세 {job}의 {start} → {goal} 정착 시뮬레이션",
+      subTemplate: "({months}개월 후 예상 시나리오)",
+      stages: [
+        {
+          label: "Phase 1: 준비",
+          title: "새로운 시작에 대한 기대와 현실",
+          content: {
+            situation: "{start}에서 {job}(으)로 살아가던 {age}세, {goal}(으)로의 이주를 결심.",
+            thought: "\"{goal}에서는 더 나은 삶이 기다리고 있을 거야.\"",
+            action: "초기 자금 계획 수립 및 {visa} 정보 수집 시작."
+          }
+        },
+        {
+          label: "Phase 2: 실행",
+          title: "예상치 못한 변수 발생",
+          content: {
+            experiment: "{goal} 현지 계좌 개설 및 주거 계약 시도.",
+            failure: "예상보다 높은 초기 정착 비용과 복잡한 행정 절차에 난관 봉착. 초기 예산의 20% 추가 소요.",
+            question: "\"계획이 너무 안일했나?\"",
+            solution: "현지 커뮤니티의 도움을 받아 비용 절감 방법을 찾고, 단기 거주지를 우선 확보하며 장기 계획을 수정.",
+            reality: "초기 생활비 절약 목표 달성률: 60%"
+          }
+        },
+        {
+          label: "Phase 3: 적응",
+          title: "문화적 차이와 기회",
+          content: {
+            situation: "현지 생활에 어느정도 익숙해졌지만, 언어와 문화의 장벽을 느낌.",
+            failure: "중요한 계약에서 의사소통 문제로 손실 발생. 외로움과 고립감 심화.",
+            solution: "언어 학습에 집중하고, 적극적으로 현지 네트워크에 참여하여 정보 교류 및 유대감 형성.",
+            thought: "\"이곳에 진정으로 스며들기 위한 노력이 필요하다.\""
+          }
+        },
+        {
+          label: "Phase 4: 안정",
+          title: "새로운 현실 구축",
+          content: {
+            result: "{months}개월 후, {goal}에서의 생활 안정화. 새로운 환경에서의 수입 구조 창출 및 커뮤니티의 일원으로 자리매김.",
+            reality: "- 예상보다 {prop} 비용이 높았지만, {bank}를 통한 자금 운용으로 일부 상쇄.\n- 의료 시스템은 {start}과 달라 사보험 가입이 필수적.\n- 얻은 것: 새로운 경험과 기회. 잃은 것: 익숙함과 편리함.\n\n경제적 안정성은 달성했지만, 삶의 만족도는 다른 차원의 문제임을 깨달음."
+          }
+        }
+      ]
+    },
+    essay: {
+      title: "장소를 바꾼다고 당신이 바뀌지는 않는다",
+      intro: "{start}의 당신과 {goal}의 당신은 같은 사람입니다. 많은 이들이 환경이 바뀌면 모든 문제가 해결될 것이라 믿지만, 문제의 근원은 대부분 우리 내면에 있습니다.",
+      body: "새로운 환경은 새로운 기회를 제공하지만, 동시에 새로운 종류의 스트레스를 안겨줍니다. 당신이 {start}에서 겪었던 인간관계의 어려움, 경제적 불안, 미래에 대한 막막함은 장소를 옮긴다고 사라지지 않습니다. 오히려 '이방인'이라는 낯선 환경 속에서 더욱 증폭될 수 있습니다.\n\n진정한 변화는 {goal}행 비행기 티켓을 끊는 것에서 시작되는 것이 아닙니다. 떠나기 전, 이곳에서 해결하지 못한 당신의 과제는 무엇인지, 당신이 진정으로 원하는 삶은 어떤 모습인지 스스로에게 묻는 것에서 시작됩니다. 그렇지 않다면 당신은 그저 더 비싼 돈을 내고 다른 장소에서 불행해질 뿐입니다."
+    }
   }
 ];
 
@@ -263,12 +318,12 @@ export const INITIAL_DB: ScenarioDB = {
   rates: { CAD: 1080, EUR: 1540, CHF: 1620, USD: 1380, AUD: 920, JPY: 910, VND: 0.055, GBP: 1750, SGD: 1030, THB: 38, IDR: 0.088 },
   scenarios: {},
   lastVerified: '2026-02-13 09:00',
-  changes: []
+  changes: [],
+  randomSamples: [
+    { age: '52', job: '은퇴', start: '싱가포르', goal: '포르투갈' },
+    { age: '45', job: '프리랜서', start: '부산', goal: '발리' },
+    { age: '53', job: '가장', start: '의정부', goal: '강남' },
+    { age: '38', job: '워케이션', start: '도쿄', goal: '호주' },
+  ],
+  essays: [] // Initialize empty array for dry columnist essays
 };
-
-export const RANDOM_SCENARIOS: Partial<UserInput>[] = [
-  { age: '52', job: '은퇴', start: '싱가포르', goal: '포르투갈' },
-  { age: '45', job: '프리랜서', start: '부산', goal: '발리' },
-  { age: '53', job: '가장', start: '의정부', goal: '강남' },
-  { age: '38', job: '워케이션', start: '도쿄', goal: '호주' },
-];
