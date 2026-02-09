@@ -23,6 +23,14 @@ const DataExportModal: React.FC<{
 }> = ({ isOpen, onClose, db, templates, onRestore }) => {
     const [copied, setCopied] = useState(false);
     const [activeTab, setActiveTab] = useState<'backup' | 'code'>('backup');
+    
+    // New States for Preview & Result
+    const [previewData, setPreviewData] = useState<{
+        valid: boolean;
+        counts: { templates: number; samples: number; essays: number };
+        rawData: any;
+    } | null>(null);
+    const [restoreResult, setRestoreResult] = useState<string | null>(null);
 
     if (!isOpen) return null;
 
@@ -58,81 +66,127 @@ export const INITIAL_DB: ScenarioDB = ${JSON.stringify(db, null, 2)};
         document.body.removeChild(element);
     };
 
-    const handleFileRestore = (e: React.ChangeEvent<HTMLInputElement>) => {
-        const fileReader = new FileReader();
-        if (e.target.files && e.target.files[0]) {
-            fileReader.readAsText(e.target.files[0], "UTF-8");
+    // Step 1: Read File & Preview
+    const handleFilePreview = (e: React.ChangeEvent<HTMLInputElement>) => {
+        const fileInput = e.target;
+        const file = fileInput.files?.[0];
+        setRestoreResult(null); // Reset previous result
+
+        if (file) {
+            const fileReader = new FileReader();
+            fileReader.readAsText(file, "UTF-8");
             fileReader.onload = (event) => {
                 try {
                     const json = JSON.parse(event.target?.result as string);
                     
                     if (!json.db || !json.templates) {
-                        alert("❌ 올바르지 않은 백업 파일 형식입니다. (db 또는 templates 속성 누락)");
+                        alert("❌ 올바르지 않은 파일 형식입니다. (db 또는 templates 누락)");
+                        setPreviewData(null);
                         return;
                     }
 
-                    // --- SMART MERGE LOGIC ---
-                    const currentTemplateIds = new Set(templates.map(t => t.id));
-                    const newTemplates = [...templates];
-                    let addedTemplatesCount = 0;
-                    
-                    (json.templates as ScenarioTemplate[]).forEach(t => {
-                        if (!currentTemplateIds.has(t.id)) {
-                            newTemplates.push(t);
-                            addedTemplatesCount++;
-                        }
+                    // Show Preview Stats
+                    setPreviewData({
+                        valid: true,
+                        counts: {
+                            templates: json.templates.length,
+                            samples: json.db.randomSamples?.length || 0,
+                            essays: json.db.essays?.length || 0
+                        },
+                        rawData: json
                     });
 
-                    const newSamples = [...(db.randomSamples || [])];
-                    let addedSamplesCount = 0;
-                    (json.db.randomSamples as Partial<UserInput>[] || []).forEach(s => {
-                        const exists = newSamples.some(curr => 
-                            curr.age === s.age && curr.job === s.job && curr.goal === s.goal
-                        );
-                        if (!exists) {
-                            newSamples.push(s);
-                            addedSamplesCount++;
-                        }
-                    });
-
-                    const newEssays = [...(db.essays || [])];
-                    let addedEssaysCount = 0;
-                    const currentEssayIds = new Set(newEssays.map(e => e.id));
-                    (json.db.essays as StandaloneEssay[] || []).forEach(essay => {
-                         if (!currentEssayIds.has(essay.id)) {
-                             newEssays.push(essay);
-                             addedEssaysCount++;
-                         }
-                    });
-                    
-                    const mergedScenarios = { ...db.scenarios, ...json.db.scenarios };
-                    const mergedRates = { ...db.rates, ...json.db.rates };
-
-                    const confirmMsg = `백업 데이터를 병합하시겠습니까?\n\n` +
-                                     `- 템플릿 추가: ${addedTemplatesCount}개\n` +
-                                     `- 예시 추가: ${addedSamplesCount}개\n` +
-                                     `- 에세이 추가: ${addedEssaysCount}개\n\n` +
-                                     `* 기존 데이터는 안전하게 유지됩니다.`;
-
-                    if(confirm(confirmMsg)) {
-                        const mergedDb: ScenarioDB = {
-                            ...db,
-                            randomSamples: newSamples,
-                            essays: newEssays,
-                            scenarios: mergedScenarios,
-                            rates: mergedRates,
-                            lastVerified: new Date().toISOString()
-                        };
-
-                        onRestore({ db: mergedDb, templates: newTemplates });
-                        onClose();
-                        alert(`✅ 스마트 병합 완료!`);
-                    }
                 } catch (err) {
                     console.error(err);
-                    alert("❌ 파일 읽기 실패");
+                    alert("❌ JSON 파싱 실패: 파일이 손상되었거나 올바르지 않습니다.");
+                } finally {
+                    fileInput.value = ''; // Reset input to allow re-selection
                 }
             };
+        }
+    };
+
+    // Step 2: Execute Restore based on Mode
+    const executeRestore = (mode: 'merge' | 'overwrite') => {
+        if (!previewData || !previewData.valid) return;
+
+        const json = previewData.rawData;
+
+        try {
+            // --- MODE 1: FULL OVERWRITE ---
+            if (mode === 'overwrite') {
+                if (confirm(`⚠️ [주의] 덮어쓰기 모드\n\n현재 시스템의 모든 데이터가 삭제되고, 파일 내용(${previewData.counts.templates}개 템플릿 등)으로 교체됩니다.\n진행하시겠습니까?`)) {
+                        const newDb = { ...json.db, lastVerified: new Date().toISOString() };
+                        onRestore({ db: newDb, templates: [...json.templates] });
+                        
+                        setRestoreResult(`✅ 덮어쓰기 완료!\n- 템플릿: ${previewData.counts.templates}개\n- 예시: ${previewData.counts.samples}개\n- 에세이: ${previewData.counts.essays}개 로 교체됨.`);
+                        setPreviewData(null); // Clear preview
+                }
+                return;
+            }
+
+            // --- MODE 2: SMART MERGE (Upsert) ---
+            let addedTemplates = 0;
+            let updatedTemplates = 0;
+            
+            // 1. Templates
+            const templateMap = new Map(templates.map(t => [t.id, t]));
+            (json.templates as ScenarioTemplate[]).forEach(t => {
+                if (templateMap.has(t.id)) updatedTemplates++;
+                else addedTemplates++;
+                templateMap.set(t.id, t);
+            });
+            const newTemplates = Array.from(templateMap.values());
+
+            // 2. Random Samples
+            const currentSamples = [...(db.randomSamples || [])];
+            const newSamplesJson = (json.db.randomSamples as Partial<UserInput>[] || []);
+            let addedSamples = 0;
+            
+            newSamplesJson.forEach(s => {
+                // Check logic: Same Age+Job+Start+Goal is considered duplicate
+                const exists = currentSamples.some(curr => 
+                    curr.age === s.age && curr.job === s.job && curr.goal === s.goal && curr.start === s.start
+                );
+                if (!exists) {
+                    currentSamples.push(s);
+                    addedSamples++;
+                }
+            });
+
+            // 3. Essays
+            const essayMap = new Map((db.essays || []).map(e => [e.id, e]));
+            let addedEssays = 0;
+            let updatedEssays = 0;
+            (json.db.essays as StandaloneEssay[] || []).forEach(e => {
+                if (essayMap.has(e.id)) updatedEssays++;
+                else addedEssays++;
+                essayMap.set(e.id, e);
+            });
+            const newEssays = Array.from(essayMap.values());
+            
+            const mergedDb: ScenarioDB = {
+                ...db,
+                ...json.db, // Base merge
+                randomSamples: currentSamples, // Smart merge result
+                essays: newEssays, // Smart merge result
+                lastVerified: new Date().toISOString()
+            };
+
+            onRestore({ db: mergedDb, templates: newTemplates });
+
+            setRestoreResult(
+                `✅ 스마트 병합 완료!\n` +
+                `----------------------------\n` +
+                `📄 템플릿: +${addedTemplates} 추가 / ↻${updatedTemplates} 업데이트\n` +
+                `👥 예시: +${addedSamples} 추가\n` +
+                `✒️ 에세이: +${addedEssays} 추가 / ↻${updatedEssays} 업데이트`
+            );
+            setPreviewData(null); // Clear preview
+
+        } catch (err) {
+            console.error(err);
+            setRestoreResult("❌ 처리 중 오류가 발생했습니다.");
         }
     };
 
@@ -142,7 +196,7 @@ export const INITIAL_DB: ScenarioDB = ${JSON.stringify(db, null, 2)};
                 <button onClick={onClose} className="absolute top-4 right-4 text-gray-400 hover:text-white p-2">✕</button>
                 <div className="mb-4">
                     <h2 className="text-xl md:text-2xl font-bold text-white flex items-center gap-2">
-                        💾 데이터 백업 & 복구 (Smart Merge)
+                        💾 데이터 백업 & 복구
                     </h2>
                     <div className="flex gap-4 mt-4 border-b border-white/10">
                         <button onClick={() => setActiveTab('backup')} className={`pb-2 px-2 text-sm font-bold transition-colors ${activeTab === 'backup' ? 'text-blue-400 border-b-2 border-blue-400' : 'text-gray-400'}`}>파일 관리 (JSON)</button>
@@ -152,18 +206,70 @@ export const INITIAL_DB: ScenarioDB = ${JSON.stringify(db, null, 2)};
                 <div className="flex-1 overflow-y-auto pr-2">
                 {activeTab === 'backup' ? (
                      <div className="grid grid-cols-1 md:grid-cols-2 gap-6 p-4">
+                        {/* Download Column */}
                         <div className="bg-white/5 rounded-xl p-6 border border-white/10 flex flex-col items-center text-center space-y-4">
                             <div className="text-4xl">⬇️</div>
                             <h3 className="text-lg font-bold text-white">데이터 내보내기</h3>
                             <button onClick={handleDownloadJson} className="w-full py-3 bg-emerald-600 hover:bg-emerald-500 rounded-xl font-bold text-white text-sm shadow-lg">파일 다운로드 (.json)</button>
+                            <p className="text-[10px] text-gray-500">현재 시스템의 모든 설정을 PC에 저장합니다.</p>
                         </div>
-                        <div className="bg-white/5 rounded-xl p-6 border border-white/10 flex flex-col items-center text-center space-y-4">
+
+                        {/* Upload Column */}
+                        <div className="bg-white/5 rounded-xl p-6 border border-white/10 flex flex-col items-center text-center space-y-4 relative">
                             <div className="text-4xl">⬆️</div>
                             <h3 className="text-lg font-bold text-white">데이터 불러오기</h3>
-                            <label className="w-full py-3 bg-blue-600/20 hover:bg-blue-600/30 border border-blue-500/50 rounded-xl font-bold text-blue-300 text-sm cursor-pointer text-center block">
-                                파일 선택 (Smart Merge)
-                                <input type="file" accept=".json" onChange={handleFileRestore} className="hidden" />
-                            </label>
+                            
+                            {/* State A: Result Message */}
+                            {restoreResult && (
+                                <div className="w-full bg-emerald-500/20 border border-emerald-500/50 rounded-lg p-3 mb-2 animate-fade-in text-left">
+                                    <pre className="text-xs text-emerald-100 whitespace-pre-wrap font-mono">{restoreResult}</pre>
+                                    <button onClick={() => setRestoreResult(null)} className="mt-2 w-full py-1 bg-emerald-600/50 hover:bg-emerald-600 rounded text-[10px] font-bold">확인</button>
+                                </div>
+                            )}
+
+                            {/* State B: File Preview & Action */}
+                            {previewData ? (
+                                <div className="w-full bg-blue-500/10 border border-blue-500/30 rounded-lg p-4 animate-fade-in">
+                                    <h4 className="text-sm font-bold text-blue-300 mb-2">📂 파일 분석 결과</h4>
+                                    <ul className="text-xs text-gray-300 space-y-1 mb-4 text-left list-disc list-inside">
+                                        <li>템플릿: <span className="text-white font-bold">{previewData.counts.templates}</span> 개</li>
+                                        <li>예시 샘플: <span className="text-white font-bold">{previewData.counts.samples}</span> 개</li>
+                                        <li>에세이: <span className="text-white font-bold">{previewData.counts.essays}</span> 개</li>
+                                    </ul>
+                                    <div className="flex gap-2">
+                                        <button 
+                                            onClick={() => executeRestore('merge')}
+                                            className="flex-1 py-2 bg-blue-600 hover:bg-blue-500 rounded-lg text-xs font-bold text-white transition-colors"
+                                        >
+                                            🔄 병합 (Upsert)
+                                        </button>
+                                        <button 
+                                            onClick={() => executeRestore('overwrite')}
+                                            className="flex-1 py-2 bg-red-600 hover:bg-red-500 rounded-lg text-xs font-bold text-white transition-colors"
+                                        >
+                                            ⚠️ 덮어쓰기
+                                        </button>
+                                    </div>
+                                    <button 
+                                        onClick={() => setPreviewData(null)}
+                                        className="mt-2 text-[10px] text-gray-500 hover:text-gray-300 underline"
+                                    >
+                                        취소하고 다른 파일 선택
+                                    </button>
+                                </div>
+                            ) : (
+                                /* State C: Initial Upload Button */
+                                <label className="w-full py-3 bg-blue-600/20 hover:bg-blue-600/30 border border-blue-500/50 rounded-xl font-bold text-blue-300 text-sm cursor-pointer text-center block transition-all">
+                                    파일 선택 (.json)
+                                    <input type="file" accept=".json" onChange={handleFilePreview} className="hidden" />
+                                </label>
+                            )}
+                            
+                            {!previewData && !restoreResult && (
+                                <p className="text-[10px] text-gray-500">
+                                    파일을 선택하면 내용을 미리 확인한 후<br/>병합 또는 덮어쓰기를 선택할 수 있습니다.
+                                </p>
+                            )}
                         </div>
                      </div>
                 ) : (
@@ -199,10 +305,12 @@ const AIDashboardHome: React.FC<{
 
     // A. Generate Random Samples
     const handleGenerateSamples = async () => {
-        if (!hasApiKey()) return alert("⚠️ API 키가 필요합니다. 설정에서 키를 등록해주세요.");
+        // [MODIFIED] No longer blocks missing API key. aiService will handle fallback.
+        const isDemo = !hasApiKey();
         
         setIsGeneratingSamples(true);
-        addLog(`🔄 AI 페르소나 ${sampleCount}명 생성 시작...`);
+        addLog(isDemo ? `⚠️ API 키 없음: 데모 모드로 페르소나 생성 중...` : `🔄 AI 페르소나 ${sampleCount}명 생성 시작...`);
+        
         try {
             const newSamples = await generateBatchRandomSamples(sampleCount);
             onUpdateDb(prev => ({
@@ -219,10 +327,10 @@ const AIDashboardHome: React.FC<{
 
     // B. Suggest Missing Topics
     const handleSuggestTopics = async () => {
-        if (!hasApiKey()) return alert("⚠️ API 키가 필요합니다.");
-        
+        const isDemo = !hasApiKey();
+
         setIsAnalyzingTopics(true);
-        addLog("🔄 현재 템플릿 분포 분석 중...");
+        addLog(isDemo ? "⚠️ API 키 없음: 데모 주제 분석 중..." : "🔄 현재 템플릿 분포 분석 중...");
         try {
             const currentTags = templates.flatMap(t => t.tags);
             const suggestions = await suggestNewScenarioTopics(currentTags, 3); // Suggest 3 new topics
@@ -237,10 +345,10 @@ const AIDashboardHome: React.FC<{
 
     // C. Create Template from Suggestion
     const handleCreateTemplate = async (topic: UserInput, index: number) => {
-        if (!hasApiKey()) return alert("⚠️ API 키가 필요합니다.");
-        
+        const isDemo = !hasApiKey();
+
         setProcessingTopicIndex(index);
-        addLog(`🔄 '${topic.goal}' 시나리오 템플릿 생성 중...`);
+        addLog(isDemo ? `⚠️ 데모 모드: '${topic.goal}' 템플릿 생성 중...` : `🔄 '${topic.goal}' 시나리오 템플릿 생성 중...`);
         try {
             const newTemplate = await generateNewScenarioTemplate(topic);
             if (newTemplate) {
