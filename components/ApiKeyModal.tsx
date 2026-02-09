@@ -20,18 +20,19 @@ export const ApiKeyModal: React.FC<ApiKeyModalProps> = ({ onClose, isOpen }) => 
   }, [isOpen]);
 
   const handleTestAndSave = async () => {
-    if (!key) {
+    const trimmedKey = key.trim();
+    if (!trimmedKey) {
         setMsg("API 키를 입력해주세요.");
         return;
     }
 
     setStatus('testing');
-    setMsg("Google Gemini 서버 연결 중...");
+    setMsg("Google Gemini 서버 (gemini-3-flash) 연결 중...");
 
-    const isValid = await validateApiKey(key);
+    const isValid = await validateApiKey(trimmedKey);
     
     if (isValid) {
-        saveApiKey(key);
+        saveApiKey(trimmedKey);
         setStatus('success');
         setMsg("✅ 연결 성공! 키가 로컬에 안전하게 저장되었습니다.");
         setTimeout(() => {
@@ -41,7 +42,7 @@ export const ApiKeyModal: React.FC<ApiKeyModalProps> = ({ onClose, isOpen }) => 
         }, 1500);
     } else {
         setStatus('error');
-        setMsg("❌ 연결 실패. 키가 올바른지, Gemini API 사용 권한이 있는지 확인하세요.");
+        setMsg("❌ 연결 실패. 키가 올바른지 확인해주세요. (Quota 초과 또는 유효하지 않은 키)");
     }
   };
 

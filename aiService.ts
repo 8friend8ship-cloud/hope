@@ -1,38 +1,57 @@
 
-import { GoogleGenAI, Type, SchemaType } from "@google/genai";
+import { GoogleGenAI, Type, GenerateContentResponse } from "@google/genai";
 import { UserInput, ScenarioTemplate, ScenarioDB } from "./types";
 import { detectCountry, GLOBAL_100 } from "./constants";
 
+// Helper to check if API Key exists (Env or LocalStorage)
+export const hasApiKey = (): boolean => {
+    // [Changed] Prioritize Environment Key for seamless development
+    if (process.env.API_KEY) return true;
+    
+    const localKey = localStorage.getItem('user_gemini_key');
+    return !!(localKey && localKey.trim().length > 0);
+};
+
 // Helper to get Client with dynamic key
 const getGenAI = (): GoogleGenAI | null => {
-  const localKey = localStorage.getItem('user_gemini_key');
-  // Simple Base64 decoding if user stored it "encrypted" (basic obfuscation)
-  // In a real app, this logic handles the retrieval. 
-  // Here we assume raw key or simple string.
-  const apiKey = localKey || process.env.API_KEY;
+  // [Changed] Use Process Env Key FIRST if available
+  const apiKey = process.env.API_KEY || localStorage.getItem('user_gemini_key');
 
   if (!apiKey) {
     console.warn("No API Key found in LocalStorage or Env");
     return null;
   }
-  return new GoogleGenAI({ apiKey });
+  return new GoogleGenAI({ apiKey: apiKey.trim() });
+};
+
+// --- TIMEOUT HELPER ---
+const withTimeout = <T>(promise: Promise<T>, ms: number): Promise<T> => {
+    return new Promise((resolve, reject) => {
+        const timer = setTimeout(() => reject(new Error("AI Request Timed Out")), ms);
+        promise
+            .then(res => { clearTimeout(timer); resolve(res); })
+            .catch(err => { clearTimeout(timer); reject(err); });
+    });
 };
 
 export const saveApiKey = (key: string) => {
-    localStorage.setItem('user_gemini_key', key);
+    localStorage.setItem('user_gemini_key', key.trim());
 };
 
 export const validateApiKey = async (key: string): Promise<boolean> => {
     try {
-        const client = new GoogleGenAI({ apiKey: key });
-        // Try a very cheap/fast call to validate
-        await client.models.generateContent({
-            model: 'gemini-2.5-flash-preview',
+        const cleanKey = key.trim();
+        if (!cleanKey) return false;
+
+        const client = new GoogleGenAI({ apiKey: cleanKey });
+        // Use gemini-3-flash-preview for validation as it is the standard for basic tasks
+        await withTimeout<GenerateContentResponse>(client.models.generateContent({
+            model: 'gemini-3-flash-preview',
             contents: 'ping',
-        });
+        }), 10000);
         return true;
     } catch (e) {
-        console.error("API Key Validation Failed", e);
+        console.error("API Key Validation Failed:", e);
         return false;
     }
 };
@@ -61,18 +80,20 @@ export const parseUserPrompt = async (rawText: string): Promise<Partial<UserInpu
       required: ["age", "start", "goal", "moveType", "isDomestic"]
     };
 
-    const response = await ai.models.generateContent({
-      model: 'gemini-2.5-flash-preview',
+    const response = await withTimeout<GenerateContentResponse>(ai.models.generateContent({
+      model: 'gemini-3-flash-preview',
       contents: `Analyze this user prompt for a life simulation: "${rawText}". Extract key details. Determine strictly if it is a domestic move or international move.`,
       config: {
         responseMimeType: "application/json",
         responseSchema: schema,
         temperature: 0.1, 
       }
-    });
+    }), 10000);
 
-    const text = response.text;
-    if (!text) return {};
+    let text = response.text || "{}";
+    // Clean markdown if present
+    text = text.replace(/```json\n?/g, '').replace(/```/g, '').trim();
+    
     return JSON.parse(text);
   } catch (e) {
     console.error("Input Parsing Failed", e);
@@ -105,8 +126,8 @@ export const generateBatchRandomSamples = async (count: number): Promise<Partial
       }
     };
 
-    const response = await ai.models.generateContent({
-      model: 'gemini-2.5-flash-preview',
+    const response = await withTimeout<GenerateContentResponse>(ai.models.generateContent({
+      model: 'gemini-3-flash-preview',
       contents: `Generate exactly ${count} diverse and realistic user personas for a migration simulation app.
       CRITICAL: Return a JSON Array with ${count} items.
       Include a mix of:
@@ -121,9 +142,12 @@ export const generateBatchRandomSamples = async (count: number): Promise<Partial
         responseSchema: schema,
         temperature: 0.8,
       }
-    });
+    }), 15000);
     
-    const parsed = JSON.parse(response.text || "[]");
+    let text = response.text || "[]";
+    text = text.replace(/```json\n?/g, '').replace(/```/g, '').trim();
+
+    const parsed = JSON.parse(text);
     return Array.isArray(parsed) ? parsed : [];
   } catch (e) {
     console.error("Batch Sample Generation Failed", e);
@@ -158,8 +182,8 @@ export const suggestNewScenarioTopics = async (existingTags: string[], count: nu
       }
     };
 
-    const response = await ai.models.generateContent({
-      model: 'gemini-2.5-flash-preview',
+    const response = await withTimeout<GenerateContentResponse>(ai.models.generateContent({
+      model: 'gemini-3-flash-preview',
       contents: `Current scenario tags in DB: [${existingTags.join(', ')}].
       Identify exactly ${count} trending or missing migration/lifestyle scenarios that are NOT in the list.
       (e.g., "Early retirement (FIRE)", "Working Holiday in Australia", "Rural farming in Korea", "Education migration to Malaysia").
@@ -170,9 +194,12 @@ export const suggestNewScenarioTopics = async (existingTags: string[], count: nu
         responseSchema: schema,
         temperature: 0.7,
       }
-    });
+    }), 15000);
 
-    const parsed = JSON.parse(response.text || "[]");
+    let text = response.text || "[]";
+    text = text.replace(/```json\n?/g, '').replace(/```/g, '').trim();
+    
+    const parsed = JSON.parse(text);
     return Array.isArray(parsed) ? parsed : [];
   } catch (e) {
     console.error("Topic Suggestion Failed", e);
@@ -196,8 +223,8 @@ export const validateSystemData = async (db: ScenarioDB, templates: ScenarioTemp
       sampleTemplateTags: templates[0]?.tags
     };
 
-    const response = await ai.models.generateContent({
-      model: 'gemini-2.5-flash-preview',
+    const response = await withTimeout<GenerateContentResponse>(ai.models.generateContent({
+      model: 'gemini-3-flash-preview',
       contents: `Act as a Database Administrator AI. Audit this JSON summary of a simulation app:
       ${JSON.stringify(dataSummary)}
       
@@ -214,9 +241,12 @@ export const validateSystemData = async (db: ScenarioDB, templates: ScenarioTemp
           items: { type: Type.STRING }
         }
       }
-    });
+    }), 10000);
     
-    return JSON.parse(response.text || "[]");
+    let text = response.text || "[]";
+    text = text.replace(/```json\n?/g, '').replace(/```/g, '').trim();
+
+    return JSON.parse(text);
   } catch (e) {
     return ["⚠️ Validation process failed due to API error."];
   }
@@ -255,7 +285,7 @@ export const generateNewScenarioTemplate = async (input: UserInput): Promise<Sce
       - **Is Domestic Move?**: ${input.isDomestic ? 'YES (Domestic)' : 'NO (International)'}
     `;
 
-    // Define the schema for the AI response
+    // Define the schema for the AI response to strictly match ScenarioTemplate
     const schema = {
       type: Type.OBJECT,
       properties: {
@@ -273,7 +303,7 @@ export const generateNewScenarioTemplate = async (input: UserInput): Promise<Sce
             subTemplate: { type: Type.STRING, description: "Subtitle (e.g., '{family}의 {months}개월 정착 시뮬레이션')" },
             stages: {
               type: Type.ARRAY,
-              description: "4 stages of the simulation",
+              description: "EXACTLY 4 stages of the simulation (Day 1, Early Fail, Mid Crisis, Final Result)",
               items: {
                 type: Type.OBJECT,
                 properties: {
@@ -348,24 +378,33 @@ export const generateNewScenarioTemplate = async (input: UserInput): Promise<Sce
          - Even if the user input specific values, replace them with placeholders in the template text where appropriate so it can be reused.
          - However, keep specific local facts hardcoded (e.g. "Gangnam traffic", "Jeju wind", "Vancouver rain").
       
-      3. **Structure**:
-         - Story: 4 Stages (Dream -> Reality Check -> Crisis -> Adaptation/Failure).
-         - Essay: A sharp critique of the user's desire to move to ${input.goal}.
-         - Result Table: 4 Key metrics comparing Start vs Goal.
-         - Downloads: 2 specific tools (PDF/Excel) relevant to the move type.
+      3. **Structure Requirement (EXACTLY 4 STAGES)**:
+         - Stage 1 Label: "Day 1" (The Honeymoon/Investment)
+         - Stage 2 Label: "Month 6" (The First Failure/Reality Check)
+         - Stage 3 Label: "Month 12~18" (The Deep Crisis/Infrastructure Gap)
+         - Stage 4 Label: "Month ${input.months}" (Final Result/Adaptation or Return)
+         
+      4. **Result Table**: 4 Key metrics comparing Start vs Goal (e.g., Cost of Living, Assets, Quality of Life).
+      5. **Essay**: A sharp, 3-paragraph critique of the user's desire to move to ${input.goal}.
+      6. **Downloads**: 2 specific tools (PDF/Excel) relevant to the move type.
+      
+      RETURN PURE JSON ONLY. NO MARKDOWN.
     `;
 
-    const response = await ai.models.generateContent({
-      model: 'gemini-2.5-flash-preview',
+    const response = await withTimeout<GenerateContentResponse>(ai.models.generateContent({
+      model: 'gemini-3-flash-preview',
       contents: prompt,
       config: {
         responseMimeType: "application/json",
         responseSchema: schema,
         temperature: 0.7, 
       }
-    });
+    }), 25000); // 25s timeout for full generation
 
-    const jsonText = response.text;
+    let jsonText = response.text || "";
+    // FORCE CLEAN MARKDOWN (Fixes "not writing" issue)
+    jsonText = jsonText.replace(/```json\n?/g, '').replace(/```/g, '').trim();
+    
     if (!jsonText) return null;
     
     const generatedTemplate = JSON.parse(jsonText) as ScenarioTemplate;

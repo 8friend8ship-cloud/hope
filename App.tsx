@@ -10,23 +10,36 @@ import { AdminDashboard } from './components/AdminDashboard';
 import { INITIAL_DB, GLOBAL_100, detectCountry, DEFAULT_TEMPLATES } from './constants';
 import { UserInput, StoryResult, ScenarioDB, ScenarioData, ScenarioTemplate, ComparisonRow, EssayData, DownloadableResource } from './types';
 import { GlassCard } from './components/GlassCard';
-import { generateNewScenarioTemplate, parseUserPrompt } from './aiService';
+import { generateNewScenarioTemplate, parseUserPrompt, hasApiKey } from './aiService';
 
 function App() {
-  // --- [CRITICAL FIX] Safe DB Hydration ---
-  // 로컬스토리지 데이터가 깨졌거나 구버전일 경우를 대비해 초기화 로직 강화
+  // --- [CRITICAL FIX] Data Persistence Safety Layer ---
+  // 사용자 데이터(에세이, 커스텀 템플릿)가 코드 업데이트로 인해 날아가지 않도록
+  // LocalStorage 데이터를 최우선으로 하고, 기본값(DEFAULT_TEMPLATES)을 병합(Merge)합니다.
+  
   const [db, setDb] = useState<ScenarioDB>(() => {
     try {
       const saved = localStorage.getItem('app_db');
       if (saved) {
         const parsed = JSON.parse(saved);
-        // 병합 로직: 기존 데이터 + 새 필드(essays 등) + 누락된 기본값 복구
+        
+        // 데이터 병합: 기존 필드 유지 + 새 필드 추가
+        // 중요: 사용자가 작성한 essays가 있다면 절대 덮어쓰지 않음
+        const existingEssays = Array.isArray(parsed.essays) ? parsed.essays : [];
+        const defaultEssays = Array.isArray(INITIAL_DB.essays) ? INITIAL_DB.essays : [];
+        
+        // 사용자가 작성한 데이터가 있으면 그것을 사용, 없으면 기본값 사용
+        const mergedEssays = existingEssays.length > 0 ? existingEssays : defaultEssays;
+        
+        const existingSamples = Array.isArray(parsed.randomSamples) ? parsed.randomSamples : [];
+        const defaultSamples = INITIAL_DB.randomSamples;
+        const mergedSamples = existingSamples.length > 0 ? existingSamples : defaultSamples;
+
         return {
-          ...INITIAL_DB, // 최신 구조 기반
-          ...parsed,     // 사용자 데이터 덮어쓰기
-          // 배열 필드가 null/undefined/숫자 등으로 깨져있을 경우 빈 배열로 강제 복구
-          randomSamples: Array.isArray(parsed.randomSamples) ? parsed.randomSamples : INITIAL_DB.randomSamples,
-          essays: Array.isArray(parsed.essays) ? parsed.essays : [],
+          ...INITIAL_DB, // 최신 코드의 구조(Schema)를 기반으로 함
+          ...parsed,     // 로컬 저장소의 값을 덮어씀 (사용자 설정 우선)
+          essays: mergedEssays, // 안전하게 병합된 에세이 리스트
+          randomSamples: mergedSamples,
           scenarios: parsed.scenarios || {}
         };
       }
@@ -41,11 +54,26 @@ function App() {
       const saved = localStorage.getItem('app_templates');
       if (saved) {
         const parsed = JSON.parse(saved);
-        return Array.isArray(parsed) ? parsed : DEFAULT_TEMPLATES;
+        if (Array.isArray(parsed)) {
+            // [FIX] 저장된 데이터가 있더라도, 내용이 0개거나 기본 템플릿들이 없으면 복구(Merge)
+            const merged = [...parsed];
+            
+            // 만약 아예 비어있으면 기본값으로 대체
+            if (merged.length === 0) return DEFAULT_TEMPLATES;
+
+            DEFAULT_TEMPLATES.forEach(def => {
+                // ID가 같은게 없으면 추가 (기본 템플릿 복구)
+                if (!merged.find(t => t.id === def.id)) {
+                    merged.push(def);
+                }
+            });
+            return merged;
+        }
       }
     } catch (e) {
       console.error("Templates Load Error, resetting:", e);
     }
+    // 저장된 게 없으면 기본 4개 템플릿 사용
     return DEFAULT_TEMPLATES;
   });
 
@@ -80,8 +108,12 @@ function App() {
   useEffect(() => {
     localStorage.setItem('app_db', JSON.stringify(db));
   }, [db]);
+  
   useEffect(() => {
-    localStorage.setItem('app_templates', JSON.stringify(templates));
+    // 템플릿이 비어있으면 저장하지 않고, 오히려 복구 시도 (Safety)
+    if (templates.length > 0) {
+        localStorage.setItem('app_templates', JSON.stringify(templates));
+    }
   }, [templates]);
 
   const handleAdminLogin = () => {
@@ -102,200 +134,213 @@ function App() {
     setLoading(true);
     setResult(null); 
     setAiGenerating(false);
-    
-    // 1. Prepare Variables
-    const age = generationInput.age || '미지정';
-    const job = generationInput.job || '미지정';
-    const start = generationInput.start || '미지정';
-    const goal = generationInput.goal || '미지정';
-    const months = generationInput.months || 24;
-    const countryKey = generationInput.country || detectCountry(goal);
-    const config = GLOBAL_100[countryKey] || GLOBAL_100['default'];
-    const isDefaultScenario = countryKey === 'default' && !generationInput.forcedTemplateId && !generationInput.useAI;
 
-    // 2. Select Template Logic
-    let selectedTemplate: ScenarioTemplate | null = null;
-    let usedAI = false;
-    
-    // CASE A: Explicit AI Generation Mode (from Admin or specific trigger)
-    if (generationInput.useAI && process.env.API_KEY) {
-        setAiGenerating(true);
-        try {
-           const aiTemplate = await generateNewScenarioTemplate(generationInput);
-           if (aiTemplate) {
-              selectedTemplate = aiTemplate;
-              // Save the new template for permanent storage
-              setTemplates(prev => [aiTemplate, ...prev]);
-              setToastMessage("🤖 AI가 생성한 새 템플릿이 영구 저장되었습니다.");
-              usedAI = true;
-           }
-        } catch (e) {
-           console.error("Forced AI Generation failed", e);
-           setToastMessage("❌ AI 생성 실패. 기존 템플릿을 사용합니다.");
-        }
-        setAiGenerating(false);
-    }
+    try {
+        // 1. Prepare Variables
+        const age = generationInput.age || '미지정';
+        const job = generationInput.job || '미지정';
+        const start = generationInput.start || '미지정';
+        const goal = generationInput.goal || '미지정';
+        const months = generationInput.months || 24;
+        const countryKey = generationInput.country || detectCountry(goal);
+        const config = GLOBAL_100[countryKey] || GLOBAL_100['default'];
+        const isDefaultScenario = countryKey === 'default' && !generationInput.forcedTemplateId && !generationInput.useAI;
 
-    // CASE B: Forced Template ID (Pre-linked in Admin)
-    if (!selectedTemplate && generationInput.forcedTemplateId) {
-      selectedTemplate = templates.find(t => t.id === generationInput.forcedTemplateId) || null;
-    }
-
-    // CASE C: Intelligent Matching (Fallback)
-    if (!selectedTemplate) {
-        const jobLower = job.toLowerCase();
-        const goalLower = goal.toLowerCase();
+        // 2. Select Template Logic
+        let selectedTemplate: ScenarioTemplate | null = null;
+        let usedAI = false;
         
-        // Find by tags
-        selectedTemplate = templates.find(t => {
-             const hasGoal = t.tags.some(tag => goalLower.includes(tag));
-             const hasFamily = generationInput.family ? t.tags.some(tag => generationInput.family?.toLowerCase().includes(tag)) : true;
-             return hasGoal && hasFamily;
-        }) || null;
+        // CASE A: Explicit AI Generation Mode
+        if (generationInput.useAI && hasApiKey()) {
+            setAiGenerating(true);
+            try {
+            const aiTemplate = await generateNewScenarioTemplate(generationInput);
+            if (aiTemplate) {
+                selectedTemplate = aiTemplate;
+                // Save the new template for permanent storage
+                setTemplates(prev => [aiTemplate, ...prev]);
+                setToastMessage("🤖 AI가 생성한 새 템플릿이 영구 저장되었습니다.");
+                usedAI = true;
+            }
+            } catch (e) {
+            console.error("Forced AI Generation failed", e);
+            setToastMessage("❌ AI 생성 실패. 기존 템플릿을 사용합니다.");
+            } finally {
+                setAiGenerating(false);
+            }
+        }
 
-        // Fallback: Just goal matching
+        // CASE B: Forced Template ID (Pre-linked in Admin)
+        if (!selectedTemplate && generationInput.forcedTemplateId) {
+        selectedTemplate = templates.find(t => t.id === generationInput.forcedTemplateId) || null;
+        }
+
+        // CASE C: Intelligent Matching (Fallback)
         if (!selectedTemplate) {
-            selectedTemplate = templates.find(t => t.tags.some(tag => goalLower.includes(tag))) || null;
+            const jobLower = job.toLowerCase();
+            const goalLower = goal.toLowerCase();
+            
+            // Find by tags
+            selectedTemplate = templates.find(t => {
+                const hasGoal = t.tags.some(tag => goalLower.includes(tag));
+                const hasFamily = generationInput.family ? t.tags.some(tag => generationInput.family?.toLowerCase().includes(tag)) : true;
+                return hasGoal && hasFamily;
+            }) || null;
+
+            // Fallback: Just goal matching
+            if (!selectedTemplate) {
+                selectedTemplate = templates.find(t => t.tags.some(tag => goalLower.includes(tag))) || null;
+            }
+            
+            // Final Fallback: AI (if not explicitly disabled and API key exists and goal is valid)
+            if (!selectedTemplate && hasApiKey() && goal !== '미지정') {
+                setAiGenerating(true);
+                try {
+                    const aiTemplate = await generateNewScenarioTemplate(generationInput);
+                    if (aiTemplate) {
+                        selectedTemplate = aiTemplate;
+                        setTemplates(prev => [aiTemplate, ...prev]);
+                        setToastMessage("🤖 새로운 패턴 발견! AI가 분석하여 저장했습니다.");
+                        usedAI = true;
+                    }
+                } catch (e) { console.error(e); }
+                finally { setAiGenerating(false); }
+            }
         }
         
-        // Final Fallback: AI (if not explicitly disabled and API key exists and goal is valid)
-        if (!selectedTemplate && process.env.API_KEY && goal !== '미지정') {
-           setAiGenerating(true);
-           try {
-              const aiTemplate = await generateNewScenarioTemplate(generationInput);
-              if (aiTemplate) {
-                 selectedTemplate = aiTemplate;
-                 setTemplates(prev => [aiTemplate, ...prev]);
-                 setToastMessage("🤖 새로운 패턴 발견! AI가 분석하여 저장했습니다.");
-                 usedAI = true;
-              }
-           } catch (e) { console.error(e); }
-           setAiGenerating(false);
+        // Final Safe Fallback
+        if (!selectedTemplate) {
+        selectedTemplate = templates.find(t => t.id === 'template_default') || templates[0];
         }
-    }
-    
-    // Final Safe Fallback
-    if (!selectedTemplate) {
-      selectedTemplate = templates.find(t => t.id === 'template_default') || templates[0];
-    }
 
-    // 3. Inject Variables
-    const inject = (text?: string) => {
-      if (!text) return "";
-      return text
-        .replace(/{age}/g, age)
-        .replace(/{job}/g, job)
-        .replace(/{start}/g, start)
-        .replace(/{goal}/g, goal)
-        .replace(/{months}/g, months.toString())
-        .replace(/{currency}/g, config.currency)
-        .replace(/{prop}/g, config.prop)
-        .replace(/{bank}/g, config.bank)
-        .replace(/{visa}/g, config.visaName)
-        .replace(/{family}/g, generationInput.family || '가족')
-        .replace(/{moveType}/g, generationInput.moveType || '이동');
-    };
+        // 3. Inject Variables
+        const inject = (text?: string) => {
+        if (!text) return "";
+        return text
+            .replace(/{age}/g, age)
+            .replace(/{job}/g, job)
+            .replace(/{start}/g, start)
+            .replace(/{goal}/g, goal)
+            .replace(/{months}/g, months.toString())
+            .replace(/{currency}/g, config.currency)
+            .replace(/{prop}/g, config.prop)
+            .replace(/{bank}/g, config.bank)
+            .replace(/{visa}/g, config.visaName)
+            .replace(/{family}/g, generationInput.family || '가족')
+            .replace(/{moveType}/g, generationInput.moveType || '이동');
+        };
 
-    const randInt = (min: number, max: number) => Math.floor(Math.random() * (max - min + 1)) + min;
-    
-    // 4. Generate Result Table
-    let resultTable: ComparisonRow[] = [];
-    
-    if (selectedTemplate.resultTable) {
-      resultTable = selectedTemplate.resultTable.map(row => ({
-        item: inject(row.item),
-        before: inject(row.before),
-        after: inject(row.after),
-        diff: inject(row.diff)
-      }));
-    } else {
-      resultTable = [
-          { item: '월 생활비', before: `${config.currency} 4,500`, after: `${config.currency} 3,200`, diff: `-1,300` },
-          { item: '자산', before: '유동성 부족', after: '환차익 발생', diff: `+${randInt(1, 15)}%` },
-          { item: '의료비', before: '보험 적용', after: '사립 병원', diff: '+200%' },
-          { item: '순 저축', before: '100', after: '350', diff: '+250' }
-      ];
-    }
+        const randInt = (min: number, max: number) => Math.floor(Math.random() * (max - min + 1)) + min;
+        
+        // 4. Generate Result Table
+        let resultTable: ComparisonRow[] = [];
+        
+        if (selectedTemplate.resultTable) {
+        resultTable = selectedTemplate.resultTable.map(row => ({
+            item: inject(row.item),
+            before: inject(row.before),
+            after: inject(row.after),
+            diff: inject(row.diff)
+        }));
+        } else {
+        resultTable = [
+            { item: '월 생활비', before: `${config.currency} 4,500`, after: `${config.currency} 3,200`, diff: `-1,300` },
+            { item: '자산', before: '유동성 부족', after: '환차익 발생', diff: `+${randInt(1, 15)}%` },
+            { item: '의료비', before: '보험 적용', after: '사립 병원', diff: '+200%' },
+            { item: '순 저축', before: '100', after: '350', diff: '+250' }
+        ];
+        }
 
-    // 5. Generate Essay
-    const defaultEssay: EssayData = {
-      title: `${goal}의 현실: 숫자가 말해주지 않는 것들`,
-      intro: `${start}를 떠나 ${goal}로 향하는 당신의 발걸음은 가볍겠지만, 현실의 무게는 결코 가볍지 않습니다.`,
-      body: "우리는 종종 장소만 바뀌면 삶이 바뀔 것이라 착각합니다. 하지만 당신이 가져가는 것은 짐가방뿐만이 아닙니다. 당신의 불안과 습관도 국경을 넘습니다."
-    };
+        // 5. Generate Essay
+        const defaultEssay: EssayData = {
+        title: `${goal}의 현실: 숫자가 말해주지 않는 것들`,
+        intro: `${start}를 떠나 ${goal}로 향하는 당신의 발걸음은 가볍겠지만, 현실의 무게는 결코 가볍지 않습니다.`,
+        body: "우리는 종종 장소만 바뀌면 삶이 바뀔 것이라 착각합니다. 하지만 당신이 가져가는 것은 짐가방뿐만이 아닙니다. 당신의 불안과 습관도 국경을 넘습니다."
+        };
 
-    const essayData: EssayData = selectedTemplate.essay ? {
-      title: inject(selectedTemplate.essay.title),
-      intro: inject(selectedTemplate.essay.intro),
-      body: inject(selectedTemplate.essay.body)
-    } : defaultEssay;
+        const essayData: EssayData = selectedTemplate.essay ? {
+        title: inject(selectedTemplate.essay.title),
+        intro: inject(selectedTemplate.essay.intro),
+        body: inject(selectedTemplate.essay.body)
+        } : defaultEssay;
 
-    // 6. Generate Downloads
-    const downloads: DownloadableResource[] = selectedTemplate.downloads ? selectedTemplate.downloads.map(d => ({
-      ...d,
-      title: inject(d.title),
-      description: inject(d.description),
-      triggerUrl: inject(d.triggerUrl)
-    })) : [];
+        // 6. Generate Downloads
+        const downloads: DownloadableResource[] = selectedTemplate.downloads ? selectedTemplate.downloads.map(d => ({
+        ...d,
+        title: inject(d.title),
+        description: inject(d.description),
+        triggerUrl: inject(d.triggerUrl)
+        })) : [];
 
-    const scenarioData: ScenarioData = {
-        success: randInt(40, 95),
-        salary: config.avgSalary,
-        visa: config.visaName,
-        living: randInt(100, 450), 
-        story: {
-            header: inject(selectedTemplate.story.titleTemplate),
-            subHeader: inject(selectedTemplate.story.subTemplate),
-            stages: selectedTemplate.story.stages.map(s => ({
-              label: s.label,
-              title: inject(s.title),
-              situation: inject(s.content.situation),
-              thought: inject(s.content.thought),
-              action: inject(s.content.action),
-              experiment: inject(s.content.experiment),
-              failure: inject(s.content.failure),
-              question: inject(s.content.question),
-              solution: inject(s.content.solution),
-              result: inject(s.content.result),
-              reality: inject(s.content.reality),
-            })) as [any, any, any, any]
-        },
-        resultTable: resultTable,
-        additionalInfo: {
-            obstacles: ['현지 규제', '환율 변동', '언어 장벽'],
-            nextSteps: [
-                { label: '구글 검색', value: `${start} 은퇴자 ${goal} 비자 후기` },
-                { label: '유튜브', value: `${goal} 현지 물가 브이로그` },
-                { label: 'PDF 다운로드', value: `${goal} 정착 가이드` }
-            ]
-        },
-        essay: essayData,
-        downloads: downloads,
-        visaInfoUrl: config.visaInfoUrl,
-    };
+        const scenarioData: ScenarioData = {
+            success: randInt(40, 95),
+            salary: config.avgSalary,
+            visa: config.visaName,
+            living: randInt(100, 450), 
+            story: {
+                header: inject(selectedTemplate.story.titleTemplate),
+                subHeader: inject(selectedTemplate.story.subTemplate),
+                stages: selectedTemplate.story.stages.map(s => {
+                    // [LEGACY SUPPORT] Handle cases where 'content' wrapper is missing (old data)
+                    // The schema requires 'content', but old saved templates might put situation directly on 's'
+                    const content = s.content || (s as any);
+                    
+                    return {
+                        label: s.label,
+                        title: inject(s.title),
+                        situation: inject(content.situation || ''),
+                        thought: inject(content.thought || ''),
+                        action: inject(content.action || ''),
+                        experiment: inject(content.experiment || ''),
+                        failure: inject(content.failure || ''),
+                        question: inject(content.question || ''),
+                        solution: inject(content.solution || ''),
+                        result: inject(content.result || ''),
+                        reality: inject(content.reality || ''),
+                    };
+                }) as [any, any, any, any]
+            },
+            resultTable: resultTable,
+            additionalInfo: {
+                obstacles: ['현지 규제', '환율 변동', '언어 장벽'],
+                nextSteps: [
+                    { label: '구글 검색', value: `${start} 은퇴자 ${goal} 비자 후기` },
+                    { label: '유튜브', value: `${goal} 현지 물가 브이로그` },
+                    { label: 'PDF 다운로드', value: `${goal} 정착 가이드` }
+                ]
+            },
+            essay: essayData,
+            downloads: downloads,
+            visaInfoUrl: config.visaInfoUrl,
+        };
 
-    const title = scenarioData.story.header;
-    const progress = randInt(50, 92);
+        const title = scenarioData.story.header;
+        const progress = randInt(50, 92);
 
-    const newResult: StoryResult = {
-      title,
-      scenarioData,
-      progress,
-      userInput: generationInput,
-      timestamp: new Date().toLocaleTimeString(),
-      isDefault: isDefaultScenario && !usedAI,
-    };
+        const newResult: StoryResult = {
+        title,
+        scenarioData,
+        progress,
+        userInput: generationInput,
+        timestamp: new Date().toLocaleTimeString(),
+        isDefault: isDefaultScenario && !usedAI,
+        };
 
-    setResult(newResult);
-    setLoading(false);
-    
-    localStorage.setItem('lastStory', JSON.stringify({ input: newResult.userInput }));
-    
-    if (window.innerWidth < 1024) {
-        setTimeout(() => {
-          const resultEl = document.getElementById('result-anchor');
-          if (resultEl) resultEl.scrollIntoView({ behavior: 'smooth', block: 'start' });
-        }, 100);
+        setResult(newResult);
+        localStorage.setItem('lastStory', JSON.stringify({ input: newResult.userInput }));
+        
+        if (window.innerWidth < 1024) {
+            setTimeout(() => {
+            const resultEl = document.getElementById('result-anchor');
+            if (resultEl) resultEl.scrollIntoView({ behavior: 'smooth', block: 'start' });
+            }, 100);
+        }
+    } catch (error) {
+        console.error("Critical Error in Scenario Generation:", error);
+        setToastMessage("⚠️ 시나리오 생성 중 오류가 발생했습니다.");
+    } finally {
+        setLoading(false);
+        setAiGenerating(false);
     }
   }, [templates, db]);
 
@@ -305,15 +350,17 @@ function App() {
       ...parsedData
     };
 
-    if (rawText && rawText.length > 10 && process.env.API_KEY) {
+    // [FIX] Use hasApiKey() check
+    if (rawText && rawText.length > 10 && hasApiKey()) {
         setAiAnalyzing(true);
         try {
             const deepAnalysis = await parseUserPrompt(rawText);
             finalInput = { ...finalInput, ...deepAnalysis };
         } catch (e) {
             console.error("Deep analysis failed, using regex fallback");
+        } finally {
+            setAiAnalyzing(false);
         }
-        setAiAnalyzing(false);
     }
 
     setInput(finalInput);
@@ -321,9 +368,12 @@ function App() {
   };
 
   const handleRandom = () => {
-    const samples = db.randomSamples || [];
+    // Safety check: ensure randomSamples is array
+    const samples = Array.isArray(db.randomSamples) ? db.randomSamples : [];
     if (samples.length === 0) {
-      setToastMessage("🎲 관리자 페이지에서 랜덤 예시를 추가해주세요.");
+      setToastMessage("🎲 예시 데이터가 없어 기본 예시를 복구합니다.");
+      setDb(prev => ({...prev, randomSamples: INITIAL_DB.randomSamples}));
+      setTimeout(() => handleRandom(), 100);
       return;
     }
     const random = samples[Math.floor(Math.random() * samples.length)];
