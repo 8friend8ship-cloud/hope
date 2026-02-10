@@ -1,5 +1,5 @@
 
-import { ScenarioDB, UserInput, CountryConfig, ScenarioTemplate } from './types';
+import { ScenarioDB, UserInput, CountryConfig, ScenarioTemplate, Language } from './types';
 
 // --- GLOBAL MASTER DATASET ---
 export const GLOBAL_100: Record<string, CountryConfig> = {
@@ -12,6 +12,20 @@ export const GLOBAL_100: Record<string, CountryConfig> = {
   australia: { code: 'en', currency: 'A$', bank: 'CBA', prop: 'Realestate.com.au', cities: ['시드니','멜버른','브리즈번', '골드코스트'], visaName: 'TSS 482', avgSalary: 'A$9.2만', visaInfoUrl: 'https://immi.homeaffairs.gov.au/visas/working-in-australia' },
   default: { code: 'en', currency: '$', bank: 'Global Bank', prop: 'Global Prop', cities: ['Global City'], visaName: 'Work Visa', avgSalary: '$50,000', visaInfoUrl: 'https://google.com/search?q=work+visa+information' }
 };
+
+export const LANGUAGES: { code: Language; label: string; flag: string }[] = [
+  { code: 'ko', label: '한국어', flag: '🇰🇷' },
+  { code: 'en', label: 'English', flag: '🇺🇸' },
+  { code: 'jp', label: '日本語', flag: '🇯🇵' },
+  { code: 'cn', label: '中文', flag: '🇨🇳' },
+  { code: 'es', label: 'Español', flag: '🇪🇸' },
+  { code: 'fr', label: 'Français', flag: '🇫🇷' },
+  { code: 'de', label: 'Deutsch', flag: '🇩🇪' },
+  { code: 'ru', label: 'Русский', flag: '🇷🇺' },
+  { code: 'vn', label: 'Tiếng Việt', flag: '🇻🇳' },
+  { code: 'th', label: 'ไทย', flag: '🇹🇭' },
+  { code: 'id', label: 'Bahasa Indonesia', flag: '🇮🇩' },
+];
 
 export const detectCountry = (text: string): string => {
   const t = text.toLowerCase();

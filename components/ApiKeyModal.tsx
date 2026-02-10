@@ -29,9 +29,9 @@ export const ApiKeyModal: React.FC<ApiKeyModalProps> = ({ onClose, isOpen }) => 
     setStatus('testing');
     setMsg("Google Gemini 서버 (gemini-3-flash) 연결 중...");
 
-    const isValid = await validateApiKey(trimmedKey);
+    const result = await validateApiKey(trimmedKey);
     
-    if (isValid) {
+    if (result.isValid) {
         saveApiKey(trimmedKey);
         setStatus('success');
         setMsg("✅ 연결 성공! 키가 로컬에 안전하게 저장되었습니다.");
@@ -42,7 +42,7 @@ export const ApiKeyModal: React.FC<ApiKeyModalProps> = ({ onClose, isOpen }) => 
         }, 1500);
     } else {
         setStatus('error');
-        setMsg("❌ 연결 실패. 키가 올바른지 확인해주세요. (Quota 초과 또는 유효하지 않은 키)");
+        setMsg(result.error || "❌ 연결 실패: 알 수 없는 오류가 발생했습니다.");
     }
   };
 
@@ -73,7 +73,7 @@ export const ApiKeyModal: React.FC<ApiKeyModalProps> = ({ onClose, isOpen }) => 
             </div>
 
             {msg && (
-                <div className={`text-xs p-3 rounded-lg text-center font-bold ${status === 'error' ? 'bg-red-900/50 text-red-200' : status === 'success' ? 'bg-emerald-900/50 text-emerald-300' : 'bg-white/5 text-gray-300'}`}>
+                <div className={`text-xs p-3 rounded-lg text-center font-bold whitespace-pre-line ${status === 'error' ? 'bg-red-900/50 text-red-200' : status === 'success' ? 'bg-emerald-900/50 text-emerald-300' : 'bg-white/5 text-gray-300'}`}>
                     {msg}
                 </div>
             )}

@@ -148,3 +148,5 @@ export interface CountryConfig {
   avgSalary: string;
   visaInfoUrl: string; // New field for official visa link
 }
+
+export type Language = 'ko' | 'en' | 'jp' | 'cn' | 'es' | 'fr' | 'de' | 'ru' | 'vn' | 'th' | 'id';

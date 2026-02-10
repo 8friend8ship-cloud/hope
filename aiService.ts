@@ -1,12 +1,54 @@
-
 import { GoogleGenAI, Type, GenerateContentResponse } from "@google/genai";
-import { UserInput, ScenarioTemplate, ScenarioDB } from "./types";
+import { UserInput, ScenarioTemplate, ScenarioDB, Language, StandaloneEssay } from "./types";
 import { detectCountry, GLOBAL_100 } from "./constants";
+
+// --- ERROR HANDLING HELPER ---
+const getFriendlyErrorMessage = (error: any): string => {
+    const msg = error?.message || String(error);
+    
+    if (msg.includes("429") || msg.includes("Resource has been exhausted")) {
+        return "⚠️ [429 Quota Exceeded] 하루 무료 할당량을 모두 사용했습니다. 내일 다시 시도하거나 다른 API 키를 사용하세요.";
+    }
+    if (msg.includes("401") || msg.includes("API key not valid")) {
+        return "❌ [401 Invalid Key] API 키가 올바르지 않습니다. 키를 잘못 복사했거나 삭제된 키입니다.";
+    }
+    if (msg.includes("403")) {
+        return "🚫 [403 Forbidden] 권한이 없습니다. (해당 API 키로 gemini-3-flash 모델 접근 불가 또는 지역 제한)";
+    }
+    if (msg.includes("404")) {
+        return "❓ [404 Not Found] 모델을 찾을 수 없습니다. (모델명 오류 또는 지원 종료)";
+    }
+    if (msg.includes("503") || msg.includes("Overloaded")) {
+        return "🐢 [503 Overloaded] Google 서버 과부하 상태입니다. 잠시 후 다시 시도해주세요.";
+    }
+    if (msg.includes("Timed Out") || msg.includes("Timeout")) {
+        return "⏱️ [Timeout] 요청 시간이 초과되었습니다. 네트워크 상태를 확인하세요. (분석 시간이 길어지고 있습니다)";
+    }
+    if (msg.includes("fetch failed") || msg.includes("NetworkError")) {
+        return "🌐 네트워크 오류: 인터넷 연결을 확인해주세요.";
+    }
+    
+    return `⚠️ 시스템 오류: ${msg.substring(0, 100)}...`;
+};
+
+// Helper to safely get Env Key without crashing in browser
+const getEnvApiKey = (): string | null => {
+    try {
+        // @ts-ignore
+        if (typeof process !== 'undefined' && process.env && process.env.API_KEY) {
+            // @ts-ignore
+            return process.env.API_KEY;
+        }
+    } catch (e) {
+        return null;
+    }
+    return null;
+};
 
 // Helper to check if API Key exists (Env or LocalStorage)
 export const hasApiKey = (): boolean => {
-    // [Changed] Prioritize Environment Key for seamless development
-    if (process.env.API_KEY) return true;
+    const envKey = getEnvApiKey();
+    if (envKey) return true;
     
     const localKey = localStorage.getItem('user_gemini_key');
     return !!(localKey && localKey.trim().length > 0);
@@ -14,8 +56,7 @@ export const hasApiKey = (): boolean => {
 
 // Helper to get Client with dynamic key
 const getGenAI = (): GoogleGenAI | null => {
-  // [Changed] Use Process Env Key FIRST if available
-  const apiKey = process.env.API_KEY || localStorage.getItem('user_gemini_key');
+  const apiKey = getEnvApiKey() || localStorage.getItem('user_gemini_key');
 
   if (!apiKey) {
     console.warn("No API Key found in LocalStorage or Env");
@@ -27,7 +68,7 @@ const getGenAI = (): GoogleGenAI | null => {
 // --- TIMEOUT HELPER ---
 const withTimeout = <T>(promise: Promise<T>, ms: number): Promise<T> => {
     return new Promise((resolve, reject) => {
-        const timer = setTimeout(() => reject(new Error("AI Request Timed Out")), ms);
+        const timer = setTimeout(() => reject(new Error(`Request Timed Out after ${ms}ms`)), ms);
         promise
             .then(res => { clearTimeout(timer); resolve(res); })
             .catch(err => { clearTimeout(timer); reject(err); });
@@ -38,21 +79,21 @@ export const saveApiKey = (key: string) => {
     localStorage.setItem('user_gemini_key', key.trim());
 };
 
-export const validateApiKey = async (key: string): Promise<boolean> => {
+export const validateApiKey = async (key: string): Promise<{ isValid: boolean; error?: string }> => {
     try {
         const cleanKey = key.trim();
-        if (!cleanKey) return false;
+        if (!cleanKey) return { isValid: false, error: "키가 입력되지 않았습니다." };
 
         const client = new GoogleGenAI({ apiKey: cleanKey });
-        // Use gemini-3-flash-preview for validation as it is the standard for basic tasks
+        // Increase timeout to 30s for validation to be safe
         await withTimeout<GenerateContentResponse>(client.models.generateContent({
             model: 'gemini-3-flash-preview',
             contents: 'ping',
-        }), 10000);
-        return true;
+        }), 30000);
+        return { isValid: true };
     } catch (e) {
         console.error("API Key Validation Failed:", e);
-        return false;
+        return { isValid: false, error: getFriendlyErrorMessage(e) };
     }
 };
 
@@ -80,23 +121,23 @@ export const parseUserPrompt = async (rawText: string): Promise<Partial<UserInpu
       required: ["age", "start", "goal", "moveType", "isDomestic"]
     };
 
+    // Increase timeout to 60s (1 minute) for deep analysis
     const response = await withTimeout<GenerateContentResponse>(ai.models.generateContent({
       model: 'gemini-3-flash-preview',
-      contents: `Analyze this user prompt for a life simulation: "${rawText}". Extract key details. Determine strictly if it is a domestic move or international move.`,
+      contents: `Analyze this user prompt for a life simulation: "${rawText}". Extract key details. Determine strictly if it is a domestic move or international move. Translate start/goal to English for consistency if needed, but keep original if it helps.`,
       config: {
         responseMimeType: "application/json",
         responseSchema: schema,
         temperature: 0.1, 
       }
-    }), 10000);
+    }), 60000);
 
     let text = response.text || "{}";
-    // Clean markdown if present
     text = text.replace(/```json\n?/g, '').replace(/```/g, '').trim();
     
     return JSON.parse(text);
   } catch (e) {
-    console.error("Input Parsing Failed", e);
+    console.warn("Input Parsing Failed (Soft Fail):", getFriendlyErrorMessage(e));
     return {};
   }
 };
@@ -126,6 +167,7 @@ export const generateBatchRandomSamples = async (count: number): Promise<Partial
       }
     };
 
+    // Increase timeout to 90s
     const response = await withTimeout<GenerateContentResponse>(ai.models.generateContent({
       model: 'gemini-3-flash-preview',
       contents: `Generate exactly ${count} diverse and realistic user personas for a migration simulation app.
@@ -142,7 +184,7 @@ export const generateBatchRandomSamples = async (count: number): Promise<Partial
         responseSchema: schema,
         temperature: 0.8,
       }
-    }), 15000);
+    }), 90000);
     
     let text = response.text || "[]";
     text = text.replace(/```json\n?/g, '').replace(/```/g, '').trim();
@@ -150,8 +192,7 @@ export const generateBatchRandomSamples = async (count: number): Promise<Partial
     const parsed = JSON.parse(text);
     return Array.isArray(parsed) ? parsed : [];
   } catch (e) {
-    console.error("Batch Sample Generation Failed", e);
-    throw e; // Re-throw to handle in UI
+    throw new Error(getFriendlyErrorMessage(e));
   }
 };
 
@@ -182,6 +223,7 @@ export const suggestNewScenarioTopics = async (existingTags: string[], count: nu
       }
     };
 
+    // Increase timeout to 90s
     const response = await withTimeout<GenerateContentResponse>(ai.models.generateContent({
       model: 'gemini-3-flash-preview',
       contents: `Current scenario tags in DB: [${existingTags.join(', ')}].
@@ -194,7 +236,7 @@ export const suggestNewScenarioTopics = async (existingTags: string[], count: nu
         responseSchema: schema,
         temperature: 0.7,
       }
-    }), 15000);
+    }), 90000);
 
     let text = response.text || "[]";
     text = text.replace(/```json\n?/g, '').replace(/```/g, '').trim();
@@ -202,8 +244,102 @@ export const suggestNewScenarioTopics = async (existingTags: string[], count: nu
     const parsed = JSON.parse(text);
     return Array.isArray(parsed) ? parsed : [];
   } catch (e) {
-    console.error("Topic Suggestion Failed", e);
-    throw e;
+    throw new Error(getFriendlyErrorMessage(e));
+  }
+};
+
+/**
+ * AI Essay Suggester: Suggests new column topics
+ */
+export const suggestNewEssayTopics = async (existingTitles: string[], count: number): Promise<{ topic: string, context: string }[]> => {
+  try {
+    const ai = getGenAI();
+    if (!ai) throw new Error("API Key Missing");
+
+    const schema = {
+      type: Type.ARRAY,
+      items: {
+        type: Type.OBJECT,
+        properties: {
+          topic: { type: Type.STRING, description: "Catchy, cynical title" },
+          context: { type: Type.STRING, description: "Brief description of what the essay is about" }
+        },
+        required: ["topic", "context"]
+      }
+    };
+
+    const response = await withTimeout<GenerateContentResponse>(ai.models.generateContent({
+      model: 'gemini-3-flash-preview',
+      contents: `We have a blog about the "Harsh Reality of Immigration/Life Changes".
+      Existing titles: [${existingTitles.join(', ')}].
+      
+      Suggest exactly ${count} NEW, provocative, and cynical essay topics that cover different aspects (e.g., relationships, mental health, reverse culture shock, career suicide).
+      The tone should be "Dry, Realist, Anti-Fantasy".`,
+      config: {
+        responseMimeType: "application/json",
+        responseSchema: schema,
+        temperature: 0.8,
+      }
+    }), 60000);
+
+    let text = response.text || "[]";
+    text = text.replace(/```json\n?/g, '').replace(/```/g, '').trim();
+    return JSON.parse(text);
+  } catch (e) {
+    throw new Error(getFriendlyErrorMessage(e));
+  }
+};
+
+/**
+ * AI Essay Generator: Writes the full essay content
+ */
+export const generateNewEssay = async (topic: string, context: string): Promise<Partial<StandaloneEssay>> => {
+  try {
+    const ai = getGenAI();
+    if (!ai) throw new Error("API Key Missing");
+
+    const prompt = `
+      Write a short, powerful column (essay) for a platform called "Hope Purchase".
+      Topic: "${topic}"
+      Context: ${context}
+      
+      Persona: A cynical, data-driven, "Dry Author" who hates blind optimism.
+      Structure:
+      - Title: Provocative.
+      - Tags: 3-4 keywords.
+      - Content: 3 paragraphs. 
+        1. Shatter the illusion.
+        2. Present the uncomfortable reality (financial/mental).
+        3. A cold conclusion.
+      
+      Language: Korean (High-quality, literary but cold tone).
+    `;
+
+    const schema = {
+      type: Type.OBJECT,
+      properties: {
+        title: { type: Type.STRING },
+        tags: { type: Type.ARRAY, items: { type: Type.STRING } },
+        content: { type: Type.STRING }
+      },
+      required: ["title", "tags", "content"]
+    };
+
+    const response = await withTimeout<GenerateContentResponse>(ai.models.generateContent({
+      model: 'gemini-3-flash-preview',
+      contents: prompt,
+      config: {
+        responseMimeType: "application/json",
+        responseSchema: schema,
+        temperature: 0.7,
+      }
+    }), 90000); // 90s timeout for creative writing
+
+    let text = response.text || "{}";
+    text = text.replace(/```json\n?/g, '').replace(/```/g, '').trim();
+    return JSON.parse(text);
+  } catch (e) {
+    throw new Error(getFriendlyErrorMessage(e));
   }
 };
 
@@ -223,6 +359,7 @@ export const validateSystemData = async (db: ScenarioDB, templates: ScenarioTemp
       sampleTemplateTags: templates[0]?.tags
     };
 
+    // Increase timeout to 90s
     const response = await withTimeout<GenerateContentResponse>(ai.models.generateContent({
       model: 'gemini-3-flash-preview',
       contents: `Act as a Database Administrator AI. Audit this JSON summary of a simulation app:
@@ -241,18 +378,18 @@ export const validateSystemData = async (db: ScenarioDB, templates: ScenarioTemp
           items: { type: Type.STRING }
         }
       }
-    }), 10000);
+    }), 90000);
     
     let text = response.text || "[]";
     text = text.replace(/```json\n?/g, '').replace(/```/g, '').trim();
 
     return JSON.parse(text);
   } catch (e) {
-    return ["⚠️ Validation process failed due to API error."];
+    return [`❌ 검증 실패: ${getFriendlyErrorMessage(e)}`];
   }
 }
 
-export const generateNewScenarioTemplate = async (input: UserInput): Promise<ScenarioTemplate | null> => {
+export const generateNewScenarioTemplate = async (input: UserInput, language: Language = 'ko'): Promise<ScenarioTemplate | null> => {
   try {
     const ai = getGenAI();
     if (!ai) throw new Error("API Key Missing");
@@ -260,7 +397,6 @@ export const generateNewScenarioTemplate = async (input: UserInput): Promise<Sce
     const countryKey = input.country || detectCountry(input.goal);
     const config = GLOBAL_100[countryKey] || GLOBAL_100['default'];
     
-    // Determine context nuances based on Domestic vs International
     const domesticInstruction = `
       This is a **DOMESTIC MOVE** (Within the same country).
       - **DO NOT** mention Visas, Immigration checkpoints, or Currency Exchange.
@@ -285,7 +421,40 @@ export const generateNewScenarioTemplate = async (input: UserInput): Promise<Sce
       - **Is Domestic Move?**: ${input.isDomestic ? 'YES (Domestic)' : 'NO (International)'}
     `;
 
-    // Define the schema for the AI response to strictly match ScenarioTemplate
+    const langName = { 
+        ko: 'Korean', en: 'English', jp: 'Japanese', cn: 'Chinese (Simplified)',
+        es: 'Spanish', fr: 'French', de: 'German', ru: 'Russian', 
+        vn: 'Vietnamese', th: 'Thai', id: 'Indonesian'
+    }[language] || 'Korean';
+
+    const prompt = `
+      Create a "Dry Author" style life simulation template.
+      
+      ${contextDescription}
+      
+      ${input.isDomestic ? domesticInstruction : internationalInstruction}
+
+      CRITICAL INSTRUCTIONS:
+      1. **Tone**: Cynical, Analytical, Hyper-Realistic. Highlight "Hidden Costs" (Mental & Financial).
+      2. **Variables**: The output MUST be a generic template using placeholders: {age}, {job}, {start}, {goal}, {months}, {currency}, {family}.
+         - Even if the user input specific values, replace them with placeholders in the template text where appropriate so it can be reused.
+         - However, keep specific local facts hardcoded (e.g. "Gangnam traffic", "Jeju wind", "Vancouver rain").
+      
+      3. **Structure Requirement (EXACTLY 4 STAGES)**:
+         - Stage 1 Label: "Day 1" (The Honeymoon/Investment)
+         - Stage 2 Label: "Month 6" (The First Failure/Reality Check)
+         - Stage 3 Label: "Month 12~18" (The Deep Crisis/Infrastructure Gap)
+         - Stage 4 Label: "Month ${input.months}" (Final Result/Adaptation or Return)
+         
+      4. **Result Table**: 4 Key metrics comparing Start vs Goal (e.g., Cost of Living, Assets, Quality of Life).
+      5. **Essay**: A sharp, 3-paragraph critique of the user's desire to move to ${input.goal}.
+      6. **Downloads**: 2 specific tools (PDF/Excel) relevant to the move type.
+      
+      7. **LANGUAGE**: GENERATE ALL CONTENT IN ${langName} (${language}).
+
+      RETURN PURE JSON ONLY. NO MARKDOWN.
+    `;
+
     const schema = {
       type: Type.OBJECT,
       properties: {
@@ -365,32 +534,7 @@ export const generateNewScenarioTemplate = async (input: UserInput): Promise<Sce
       required: ["id", "type", "tags", "story", "essay"]
     };
 
-    const prompt = `
-      Create a "Dry Author" style life simulation template.
-      
-      ${contextDescription}
-      
-      ${input.isDomestic ? domesticInstruction : internationalInstruction}
-
-      CRITICAL INSTRUCTIONS:
-      1. **Tone**: Cynical, Analytical, Hyper-Realistic. Highlight "Hidden Costs" (Mental & Financial).
-      2. **Variables**: The output MUST be a generic template using placeholders: {age}, {job}, {start}, {goal}, {months}, {currency}, {family}.
-         - Even if the user input specific values, replace them with placeholders in the template text where appropriate so it can be reused.
-         - However, keep specific local facts hardcoded (e.g. "Gangnam traffic", "Jeju wind", "Vancouver rain").
-      
-      3. **Structure Requirement (EXACTLY 4 STAGES)**:
-         - Stage 1 Label: "Day 1" (The Honeymoon/Investment)
-         - Stage 2 Label: "Month 6" (The First Failure/Reality Check)
-         - Stage 3 Label: "Month 12~18" (The Deep Crisis/Infrastructure Gap)
-         - Stage 4 Label: "Month ${input.months}" (Final Result/Adaptation or Return)
-         
-      4. **Result Table**: 4 Key metrics comparing Start vs Goal (e.g., Cost of Living, Assets, Quality of Life).
-      5. **Essay**: A sharp, 3-paragraph critique of the user's desire to move to ${input.goal}.
-      6. **Downloads**: 2 specific tools (PDF/Excel) relevant to the move type.
-      
-      RETURN PURE JSON ONLY. NO MARKDOWN.
-    `;
-
+    // Increase timeout to 120s (2 minutes) for full template generation
     const response = await withTimeout<GenerateContentResponse>(ai.models.generateContent({
       model: 'gemini-3-flash-preview',
       contents: prompt,
@@ -399,17 +543,15 @@ export const generateNewScenarioTemplate = async (input: UserInput): Promise<Sce
         responseSchema: schema,
         temperature: 0.7, 
       }
-    }), 25000); // 25s timeout for full generation
+    }), 120000);
 
     let jsonText = response.text || "";
-    // FORCE CLEAN MARKDOWN (Fixes "not writing" issue)
     jsonText = jsonText.replace(/```json\n?/g, '').replace(/```/g, '').trim();
     
     if (!jsonText) return null;
     
     const generatedTemplate = JSON.parse(jsonText) as ScenarioTemplate;
     
-    // Post-processing: Ensure tags and ID are robust
     const additionalTags = [
         input.goal.toLowerCase(), 
         input.moveType?.toLowerCase() || 'general', 
@@ -419,14 +561,12 @@ export const generateNewScenarioTemplate = async (input: UserInput): Promise<Sce
     
     generatedTemplate.tags = [...new Set([...generatedTemplate.tags, ...additionalTags])];
     
-    // Ensure unique ID for persistence
     const typePrefix = input.isDomestic ? 'domestic' : 'global';
     generatedTemplate.id = `ai_${typePrefix}_${Date.now()}_${input.goal.replace(/\s/g, '').toLowerCase()}`;
 
     return generatedTemplate;
 
   } catch (error) {
-    console.error("Gemini AI Generation Failed:", error);
-    throw error;
+    throw new Error(getFriendlyErrorMessage(error));
   }
 };

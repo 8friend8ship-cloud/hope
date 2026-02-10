@@ -1,8 +1,9 @@
 
 import React, { useState, useEffect } from 'react';
 import { GlassCard } from './GlassCard';
-import { UserInput } from '../types';
+import { UserInput, Language } from '../types';
 import { INITIAL_DB, GLOBAL_100 } from '../constants';
+import { UI_TEXT } from '../translations';
 
 interface InputFormProps {
   input: UserInput;
@@ -12,6 +13,7 @@ interface InputFormProps {
   onDownload: () => void;
   canDownload: boolean;
   isGenerating: boolean;
+  language: Language;
 }
 
 export const InputForm: React.FC<InputFormProps> = ({
@@ -21,9 +23,11 @@ export const InputForm: React.FC<InputFormProps> = ({
   onRandom,
   onDownload,
   canDownload,
-  isGenerating
+  isGenerating,
+  language
 }) => {
   const [prompt, setPrompt] = useState('');
+  const t = UI_TEXT[language];
   
   // Basic Regex Parsing for immediate UI feedback (Client-side)
   // The heavy lifting will be done by AI in App.tsx if rawText is passed
@@ -37,13 +41,13 @@ export const InputForm: React.FC<InputFormProps> = ({
     const parsedData: Partial<UserInput> = {};
     const text = trimmedPrompt;
 
-    // 1. Age
-    const ageMatch = text.match(/(\d+)(?:세|살)/);
+    // 1. Age (Simple Regex for now, relies more on AI for other langs)
+    const ageMatch = text.match(/(\d+)(?:세|살|years|ans)/i);
     if (ageMatch) parsedData.age = ageMatch[1];
 
     // 2. Months/Years
-    const yearMatch = text.match(/(\d+)(?:년)/);
-    const monthMatch = text.match(/(\d+)(?:개월|달)/);
+    const yearMatch = text.match(/(\d+)(?:년|years)/i);
+    const monthMatch = text.match(/(\d+)(?:개월|달|months)/i);
     if (yearMatch) parsedData.months = parseInt(yearMatch[1]) * 12;
     else if (monthMatch) parsedData.months = parseInt(monthMatch[1]);
     
@@ -51,13 +55,14 @@ export const InputForm: React.FC<InputFormProps> = ({
     let newStart: string | undefined;
     let newGoal: string | undefined;
 
-    const directionMatch = text.match(/([가-힣a-zA-Z\s]+?)(?:에서|부터| 떠나서)\s*([가-힣a-zA-Z\s]+?)(?:(?:으?로)|(?:에))/);
+    // Regex for Korean primarily, fallback for others
+    const directionMatch = text.match(/([가-힣a-zA-Z\s]+?)(?:에서|부터| 떠나서| from)\s*([가-힣a-zA-Z\s]+?)(?:(?:으?로)|(?:에)| to)/i);
     if (directionMatch) {
       newStart = directionMatch[1].trim();
       newGoal = directionMatch[2].trim();
     } else {
       // Simple fallback logic
-      newStart = '한국'; 
+      newStart = language === 'ko' ? '한국' : 'My Country'; 
       for (const [key, config] of Object.entries(GLOBAL_100)) {
         const city = config.cities.find(c => text.includes(c));
         if (city) {
@@ -75,8 +80,8 @@ export const InputForm: React.FC<InputFormProps> = ({
     if (newGoal) parsedData.goal = newGoal;
 
     // 4. Job
-    const jobs = ['개발자', '디자이너', '용접공', '간호사', '요리사', '사업', '은퇴', '유학', '주재원', '인테리어', '자영업', '프리랜서', '가장', '업자'];
-    const foundJob = jobs.find(j => text.includes(j));
+    const jobs = ['개발자', '디자이너', '용접공', '간호사', '요리사', '사업', '은퇴', '유학', '주재원', '인테리어', '자영업', '프리랜서', '가장', '업자', 'Developer', 'Designer', 'Nurse', 'Cook', 'Business', 'Retire', 'Student'];
+    const foundJob = jobs.find(j => text.toLowerCase().includes(j.toLowerCase()));
     if (foundJob) parsedData.job = foundJob;
 
     // Pass both the regex-parsed data AND the raw text for AI analysis
@@ -100,9 +105,9 @@ export const InputForm: React.FC<InputFormProps> = ({
           <div className="flex justify-between items-center mb-2">
             <label className="text-emerald-400 font-bold text-sm tracking-wider uppercase flex items-center gap-2">
               <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span>
-              AI Simulation Input
+              {t.inputLabel}
             </label>
-            <div className="text-xs text-gray-400">100개국 데이터 연동됨</div>
+            <div className="text-xs text-gray-400">{t.connected}</div>
           </div>
 
           <textarea
@@ -110,17 +115,17 @@ export const InputForm: React.FC<InputFormProps> = ({
             onChange={(e) => setPrompt(e.target.value)}
             onKeyDown={handleKeyDown}
             className="w-full bg-transparent text-white text-lg md:text-xl font-medium placeholder-gray-600 focus:outline-none resize-none h-24 leading-relaxed"
-            placeholder="예) 40세, 아내랑 아이 둘 데리고 캐나다 밴쿠버 이민 가고 싶어. 자산은 3억 정도."
+            placeholder={t.placeholder}
           />
 
           <div className="flex justify-between items-center pt-2 border-t border-white/5">
             <div className="flex gap-2">
                <button onClick={onRandom} className="text-xs bg-white/5 hover:bg-white/10 px-3 py-2 rounded-lg text-gray-400 transition-colors flex items-center gap-1">
-                 <span>🎲</span> 예시 랜덤 입력
+                 <span>🎲</span> {t.randomBtn}
                </button>
                {canDownload && (
                  <button onClick={onDownload} className="text-xs bg-purple-500/10 hover:bg-purple-500/20 px-3 py-2 rounded-lg text-purple-300 transition-colors flex items-center gap-1 border border-purple-500/20">
-                   <span>📄</span> PDF 저장
+                   <span>📄</span> {t.pdfBtn}
                  </button>
                )}
             </div>
@@ -137,11 +142,11 @@ export const InputForm: React.FC<InputFormProps> = ({
               {isGenerating ? (
                 <>
                   <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin"></div>
-                  분석중...
+                  {t.analyzing}
                 </>
               ) : (
                 <>
-                  <span>🚀</span> 시뮬레이션 시작
+                  <span>🚀</span> {t.startBtn}
                 </>
               )}
             </button>

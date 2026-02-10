@@ -8,9 +8,10 @@ import { ActionButtons } from './components/ActionButtons';
 import { Toast } from './components/Toast';
 import { AdminDashboard } from './components/AdminDashboard';
 import { INITIAL_DB, GLOBAL_100, detectCountry, DEFAULT_TEMPLATES } from './constants';
-import { UserInput, StoryResult, ScenarioDB, ScenarioData, ScenarioTemplate, ComparisonRow, EssayData, DownloadableResource } from './types';
+import { UserInput, StoryResult, ScenarioDB, ScenarioData, ScenarioTemplate, ComparisonRow, EssayData, DownloadableResource, Language } from './types';
 import { GlassCard } from './components/GlassCard';
 import { generateNewScenarioTemplate, parseUserPrompt, hasApiKey } from './aiService';
+import { UI_TEXT } from './translations';
 
 function App() {
   // --- [CRITICAL FIX] Data Persistence Safety Layer ---
@@ -80,6 +81,7 @@ function App() {
   const [isAdmin, setIsAdmin] = useState(false);
   const [showAdminLogin, setShowAdminLogin] = useState(false);
   const [adminPassword, setAdminPassword] = useState('');
+  const [language, setLanguage] = useState<Language>('ko');
 
   const [input, setInput] = useState<UserInput>({
     age: '',
@@ -99,6 +101,8 @@ function App() {
   const [aiGenerating, setAiGenerating] = useState(false);
   const [aiAnalyzing, setAiAnalyzing] = useState(false);
   const [toastMessage, setToastMessage] = useState<string | null>(null);
+
+  const t = UI_TEXT[language];
 
   useEffect(() => {
     if (window.location.hash === '#admin') setShowAdminLogin(true);
@@ -144,27 +148,32 @@ function App() {
         const months = generationInput.months || 24;
         const countryKey = generationInput.country || detectCountry(goal);
         const config = GLOBAL_100[countryKey] || GLOBAL_100['default'];
-        const isDefaultScenario = countryKey === 'default' && !generationInput.forcedTemplateId && !generationInput.useAI;
+        
+        // Force AI usage if language is not Korean (Since default templates are mostly KR)
+        const forceAI = generationInput.useAI || (language !== 'ko' && hasApiKey());
+        const isDefaultScenario = countryKey === 'default' && !generationInput.forcedTemplateId && !forceAI;
 
         // 2. Select Template Logic
         let selectedTemplate: ScenarioTemplate | null = null;
         let usedAI = false;
         
-        // CASE A: Explicit AI Generation Mode
-        if (generationInput.useAI && hasApiKey()) {
+        // CASE A: Explicit AI Generation Mode or Non-Korean Language (if API Key exists)
+        if (forceAI && hasApiKey()) {
             setAiGenerating(true);
             try {
-            const aiTemplate = await generateNewScenarioTemplate(generationInput);
+            const aiTemplate = await generateNewScenarioTemplate(generationInput, language);
             if (aiTemplate) {
                 selectedTemplate = aiTemplate;
-                // Save the new template for permanent storage
-                setTemplates(prev => [aiTemplate, ...prev]);
-                setToastMessage("🤖 AI가 생성한 새 템플릿이 영구 저장되었습니다.");
+                // Only save to templates if it's in default language (KO), otherwise just use it once
+                if (language === 'ko') {
+                    setTemplates(prev => [aiTemplate, ...prev]);
+                }
+                setToastMessage("🤖 AI generated a new scenario.");
                 usedAI = true;
             }
             } catch (e) {
             console.error("Forced AI Generation failed", e);
-            setToastMessage("❌ AI 생성 실패. 기존 템플릿을 사용합니다.");
+            setToastMessage("❌ AI Generation Failed. Using default template.");
             } finally {
                 setAiGenerating(false);
             }
@@ -196,11 +205,13 @@ function App() {
             if (!selectedTemplate && hasApiKey() && goal !== '미지정') {
                 setAiGenerating(true);
                 try {
-                    const aiTemplate = await generateNewScenarioTemplate(generationInput);
+                    const aiTemplate = await generateNewScenarioTemplate(generationInput, language);
                     if (aiTemplate) {
                         selectedTemplate = aiTemplate;
-                        setTemplates(prev => [aiTemplate, ...prev]);
-                        setToastMessage("🤖 새로운 패턴 발견! AI가 분석하여 저장했습니다.");
+                        if (language === 'ko') {
+                            setTemplates(prev => [aiTemplate, ...prev]);
+                        }
+                        setToastMessage("🤖 AI generated a new scenario.");
                         usedAI = true;
                     }
                 } catch (e) { console.error(e); }
@@ -226,8 +237,8 @@ function App() {
             .replace(/{prop}/g, config.prop)
             .replace(/{bank}/g, config.bank)
             .replace(/{visa}/g, config.visaName)
-            .replace(/{family}/g, generationInput.family || '가족')
-            .replace(/{moveType}/g, generationInput.moveType || '이동');
+            .replace(/{family}/g, generationInput.family || 'Family')
+            .replace(/{moveType}/g, generationInput.moveType || 'Move');
         };
 
         const randInt = (min: number, max: number) => Math.floor(Math.random() * (max - min + 1)) + min;
@@ -244,18 +255,18 @@ function App() {
         }));
         } else {
         resultTable = [
-            { item: '월 생활비', before: `${config.currency} 4,500`, after: `${config.currency} 3,200`, diff: `-1,300` },
-            { item: '자산', before: '유동성 부족', after: '환차익 발생', diff: `+${randInt(1, 15)}%` },
-            { item: '의료비', before: '보험 적용', after: '사립 병원', diff: '+200%' },
-            { item: '순 저축', before: '100', after: '350', diff: '+250' }
+            { item: 'Cost of Living', before: `${config.currency} 4,500`, after: `${config.currency} 3,200`, diff: `-1,300` },
+            { item: 'Assets', before: 'Low Liquidity', after: 'Gain', diff: `+${randInt(1, 15)}%` },
+            { item: 'Health Cost', before: 'Insured', after: 'Private', diff: '+200%' },
+            { item: 'Savings', before: '100', after: '350', diff: '+250' }
         ];
         }
 
         // 5. Generate Essay
         const defaultEssay: EssayData = {
-        title: `${goal}의 현실: 숫자가 말해주지 않는 것들`,
-        intro: `${start}를 떠나 ${goal}로 향하는 당신의 발걸음은 가볍겠지만, 현실의 무게는 결코 가볍지 않습니다.`,
-        body: "우리는 종종 장소만 바뀌면 삶이 바뀔 것이라 착각합니다. 하지만 당신이 가져가는 것은 짐가방뿐만이 아닙니다. 당신의 불안과 습관도 국경을 넘습니다."
+        title: `${goal}: Reality Check`,
+        intro: `Moving from ${start} to ${goal} is not just changing coordinates.`,
+        body: "Problems often follow you. It's not just about the location."
         };
 
         const essayData: EssayData = selectedTemplate.essay ? {
@@ -302,11 +313,11 @@ function App() {
             },
             resultTable: resultTable,
             additionalInfo: {
-                obstacles: ['현지 규제', '환율 변동', '언어 장벽'],
+                obstacles: ['Regulation', 'Exchange Rate', 'Language'],
                 nextSteps: [
-                    { label: '구글 검색', value: `${start} 은퇴자 ${goal} 비자 후기` },
-                    { label: '유튜브', value: `${goal} 현지 물가 브이로그` },
-                    { label: 'PDF 다운로드', value: `${goal} 정착 가이드` }
+                    { label: 'Google', value: `${start} expat in ${goal} visa` },
+                    { label: 'YouTube', value: `${goal} cost of living vlog` },
+                    { label: 'Guide', value: `${goal} settlement guide PDF` }
                 ]
             },
             essay: essayData,
@@ -337,12 +348,12 @@ function App() {
         }
     } catch (error) {
         console.error("Critical Error in Scenario Generation:", error);
-        setToastMessage("⚠️ 시나리오 생성 중 오류가 발생했습니다.");
+        setToastMessage("⚠️ Error generating scenario.");
     } finally {
         setLoading(false);
         setAiGenerating(false);
     }
-  }, [templates, db]);
+  }, [templates, db, language]);
 
   const handleGenerateFromPrompt = async (parsedData: Partial<UserInput>, rawText?: string) => {
     let finalInput: UserInput = {
@@ -351,7 +362,7 @@ function App() {
     };
 
     // [FIX] Use hasApiKey() check
-    if (rawText && rawText.length > 10 && hasApiKey()) {
+    if (rawText && rawText.length > 2 && hasApiKey()) {
         setAiAnalyzing(true);
         try {
             const deepAnalysis = await parseUserPrompt(rawText);
@@ -371,7 +382,7 @@ function App() {
     // Safety check: ensure randomSamples is array
     const samples = Array.isArray(db.randomSamples) ? db.randomSamples : [];
     if (samples.length === 0) {
-      setToastMessage("🎲 예시 데이터가 없어 기본 예시를 복구합니다.");
+      setToastMessage("🎲 No examples found. Resetting...");
       setDb(prev => ({...prev, randomSamples: INITIAL_DB.randomSamples}));
       setTimeout(() => handleRandom(), 100);
       return;
@@ -383,23 +394,23 @@ function App() {
     const finalInput = { ...baseInput, ...random };
     
     setInput(finalInput);
-    setToastMessage("🎲 랜덤 시나리오를 구성했습니다.");
+    setToastMessage(t.randomBtn);
     setTimeout(() => generateStory(finalInput), 500);
   };
 
   const handleDownload = () => {
     if (result) {
-      downloadPDFElement('pdf-content', `희망구매_${result.userInput.goal}_${Date.now()}`);
-      setToastMessage("📄 리포트가 PDF로 저장되었습니다.");
+      downloadPDFElement('pdf-content', `HOPE_${result.userInput.goal}_${Date.now()}`);
+      setToastMessage("📄 Saved PDF.");
     }
   };
 
   const handleSearch = (type: 'google' | 'youtube') => {
-    const qGoal = input.goal || '이민';
-    const qJob = input.job || '취업';
+    const qGoal = input.goal || 'Immigration';
+    const qJob = input.job || 'Job';
     const url = type === 'google' 
-      ? `https://google.com/search?q=${input.age}세 ${qGoal} ${qJob} 현실 비용`
-      : `https://youtube.com/results?search_query=${qGoal} ${qJob} 브이로그`;
+      ? `https://google.com/search?q=${input.age} ${qGoal} ${qJob} cost of living`
+      : `https://youtube.com/results?search_query=${qGoal} ${qJob} vlog`;
     window.open(url);
   };
 
@@ -417,12 +428,14 @@ function App() {
              scenarioCount={templates.length} 
              lastVerified={db.lastVerified}
              onAdminClick={() => setShowAdminLogin(true)}
+             language={language}
+             setLanguage={setLanguage}
            />
         </div>
 
         <div className="flex-1 grid grid-cols-1 lg:grid-cols-12 gap-6 lg:gap-8 items-start">
             
-            <div className="lg:col-span-4 space-y-6 sticky top-8">
+            <div className="lg:col-span-4 space-y-6 lg:sticky lg:top-8 z-30">
                 <InputForm 
                   input={input}
                   onChange={handleInputChange}
@@ -431,6 +444,7 @@ function App() {
                   onDownload={handleDownload}
                   canDownload={!!result}
                   isGenerating={loading || aiAnalyzing}
+                  language={language}
                 />
                 
                 <div className="hidden lg:block space-y-6">
@@ -452,8 +466,8 @@ function App() {
                     <div className="hidden lg:flex h-full min-h-[400px] items-center justify-center border-2 border-dashed border-white/10 rounded-3xl bg-white/5 text-gray-400">
                         <div className="text-center p-8">
                             <div className="text-4xl mb-4">👈</div>
-                            <h3 className="text-xl font-bold mb-2">시뮬레이션을 시작하세요</h3>
-                            <p className="text-sm">구체적으로 입력할수록 AI가<br/>더 정밀한 미래를 예측합니다.</p>
+                            <h3 className="text-xl font-bold mb-2">{t.simStart}</h3>
+                            <p className="text-sm">{t.simDesc}</p>
                         </div>
                     </div>
                 )}
@@ -461,7 +475,8 @@ function App() {
                 <ResultSection 
                     result={result} 
                     loading={loading} 
-                    extraEssays={db.essays} 
+                    extraEssays={db.essays}
+                    language={language}
                 />
                 
                 {aiAnalyzing && (
@@ -473,7 +488,7 @@ function App() {
                                      Deep Prompt Analysis...
                                  </h3>
                                  <p className="text-sm text-gray-400 mt-2">
-                                     입력하신 내용의 의도를 파악하고 있습니다.<br/>(가족 구성원, 이사 목적, 예산 규모 등)
+                                     {t.analyzing}
                                  </p>
                              </div>
                         </div>
@@ -489,8 +504,7 @@ function App() {
                                      Creating New Scenario...
                                  </h3>
                                  <p className="text-sm text-gray-400 mt-2">
-                                     '{input.goal}'에 대한 맞춤형 템플릿을 생성 중입니다.<br/>
-                                     분석된 결과는 영구 보존됩니다.
+                                     Generative AI is writing a story for '{input.goal}' in {language.toUpperCase()}...
                                  </p>
                              </div>
                         </div>
