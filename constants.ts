@@ -271,11 +271,11 @@ export const DEFAULT_TEMPLATES: ScenarioTemplate[] = [
       }
     ]
   },
-  // 4. DEFAULT (GENERIC) TEMPLATE
+  // 4. DEFAULT (GENERIC) TEMPLATE - KOREAN
   {
     id: 'template_default',
     type: 'report',
-    tags: ['default', 'generic'],
+    tags: ['default', 'generic', 'ko'],
     story: {
       titleTemplate: "{age}세 {job}의 {start} → {goal} 정착 시뮬레이션",
       subTemplate: "({months}개월 후 예상 시나리오)",
@@ -320,24 +320,121 @@ export const DEFAULT_TEMPLATES: ScenarioTemplate[] = [
         }
       ]
     },
+    resultTable: [
+      { item: '생활비', before: '높음', after: '조정됨', diff: '-20%' },
+      { item: '삶의 질', before: '스트레스', after: '여유', diff: '개선됨' },
+      { item: '저축', before: '낮음', after: '증가', diff: '+15%' },
+      { item: '커뮤니티', before: '기존', after: '구축 중', diff: '새로움' }
+    ],
     essay: {
       title: "장소를 바꾼다고 당신이 바뀌지는 않는다",
       intro: "{start}의 당신과 {goal}의 당신은 같은 사람입니다. 많은 이들이 환경이 바뀌면 모든 문제가 해결될 것이라 믿지만, 문제의 근원은 대부분 우리 내면에 있습니다.",
       body: "새로운 환경은 새로운 기회를 제공하지만, 동시에 새로운 종류의 스트레스를 안겨줍니다. 당신이 {start}에서 겪었던 인간관계의 어려움, 경제적 불안, 미래에 대한 막막함은 장소를 옮긴다고 사라지지 않습니다. 오히려 '이방인'이라는 낯선 환경 속에서 더욱 증폭될 수 있습니다.\n\n진정한 변화는 {goal}행 비행기 티켓을 끊는 것에서 시작되는 것이 아닙니다. 떠나기 전, 이곳에서 해결하지 못한 당신의 과제는 무엇인지, 당신이 진정으로 원하는 삶은 어떤 모습인지 스스로에게 묻는 것에서 시작됩니다. 그렇지 않다면 당신은 그저 더 비싼 돈을 내고 다른 장소에서 불행해질 뿐입니다."
-    }
+    },
+    downloads: []
+  },
+  // 5. DEFAULT (GENERIC) TEMPLATE - ENGLISH
+  {
+    id: 'template_default_en',
+    type: 'report',
+    tags: ['default', 'generic', 'en'],
+    story: {
+      titleTemplate: "Simulation: {age}-year-old {job} moving from {start} to {goal}",
+      subTemplate: "(Projected scenario after {months} months)",
+      stages: [
+        {
+          label: "Phase 1: Preparation",
+          title: "Expectation vs. Reality",
+          content: {
+            situation: "Living as a {job} in {start}, decided to move to {goal}.",
+            thought: "\"Life will be better in {goal}.\"",
+            action: "Started financial planning and gathering information."
+          }
+        },
+        {
+          label: "Phase 2: Execution",
+          title: "Unexpected Variables",
+          content: {
+            experiment: "Attempting to open a bank account and sign a lease in {goal}.",
+            failure: "Faced higher initial costs and complex bureaucracy. 20% over budget.",
+            question: "\"Was my plan too naive?\"",
+            solution: "Sought help from local communities to cut costs and secured short-term housing.",
+            reality: "Initial savings goal achievement: 60%"
+          }
+        },
+        {
+          label: "Phase 3: Adaptation",
+          title: "Cultural Differences",
+          content: {
+            situation: "Getting used to daily life, but feeling the language and cultural barrier.",
+            failure: "Financial loss due to miscommunication in a contract. Deepening isolation.",
+            solution: "Focused on language learning and actively joined local networks.",
+            thought: "\"I need to make an effort to truly blend in.\""
+          }
+        },
+        {
+          label: "Phase 4: Stabilization",
+          title: "Building a New Reality",
+          content: {
+            result: "After {months} months, life in {goal} has stabilized. Established income and community.",
+            reality: "- Housing costs were higher than expected.\n- Healthcare system is different from {start}, requiring private insurance.\n- Gained: New experiences. Lost: Familiarity and convenience.\n\nAchieved economic stability, but realized life satisfaction is a different dimension."
+          }
+        }
+      ]
+    },
+    resultTable: [
+      { item: 'Cost of Living', before: 'High', after: 'Moderate', diff: '-20%' },
+      { item: 'Quality of Life', before: 'Stressed', after: 'Relaxed', diff: 'Improved' },
+      { item: 'Savings', before: 'Low', after: 'Growing', diff: '+15%' },
+      { item: 'Community', before: 'Established', after: 'Building', diff: 'New' }
+    ],
+    essay: {
+      title: "Changing Location Doesn't Change You",
+      intro: "You in {start} and you in {goal} are the same person. Many believe changing the environment solves everything, but the root cause is often within us.",
+      body: "A new environment brings new opportunities but also new stresses. The relationship struggles, financial anxiety, and uncertainty you faced in {start} won't disappear just by moving. They might even amplify in the unfamiliar setting of being a 'foreigner'.\n\nTrue change doesn't start with booking a ticket to {goal}. It starts with asking yourself what unresolved issues you have here and what life you truly want. Otherwise, you'll just be unhappy in a more expensive place."
+    },
+    downloads: []
   }
 ];
+
+export const RANDOM_SAMPLES_BY_LANG: Record<string, { age: string, job: string, start: string, goal: string }[]> = {
+  ko: [
+    { age: '52', job: '은퇴', start: '싱가포르', goal: '포르투갈' },
+    { age: '45', job: '프리랜서', start: '부산', goal: '발리' },
+    { age: '53', job: '가장', start: '의정부', goal: '강남' },
+    { age: '38', job: '워케이션', start: '도쿄', goal: '호주' },
+  ],
+  en: [
+    { age: '52', job: 'Retired', start: 'Singapore', goal: 'Portugal' },
+    { age: '45', job: 'Freelancer', start: 'New York', goal: 'Bali' },
+    { age: '35', job: 'Developer', start: 'London', goal: 'Berlin' },
+    { age: '28', job: 'Student', start: 'Seoul', goal: 'Toronto' },
+  ],
+  jp: [
+    { age: '52', job: '引退', start: 'シンガポール', goal: 'ポルトガル' },
+    { age: '45', job: 'フリーランス', start: '東京', goal: 'バリ' },
+    { age: '35', job: '開発者', start: '大阪', goal: 'ベルリン' },
+    { age: '28', job: '学生', start: 'ソウル', goal: 'トロント' },
+  ],
+  cn: [
+    { age: '52', job: '退休', start: '新加坡', goal: '葡萄牙' },
+    { age: '45', job: '自由职业者', start: '北京', goal: '巴厘岛' },
+    { age: '35', job: '开发者', start: '上海', goal: '柏林' },
+    { age: '28', job: '学生', start: '首尔', goal: '多伦多' },
+  ],
+  es: [
+    { age: '52', job: 'Jubilado', start: 'Singapur', goal: 'Portugal' },
+    { age: '45', job: 'Freelance', start: 'Madrid', goal: 'Bali' },
+    { age: '35', job: 'Desarrollador', start: 'Barcelona', goal: 'Berlín' },
+    { age: '28', job: 'Estudiante', start: 'Seúl', goal: 'Toronto' },
+  ]
+};
 
 export const INITIAL_DB: ScenarioDB = {
   rates: { CAD: 1080, EUR: 1540, CHF: 1620, USD: 1380, AUD: 920, JPY: 910, VND: 0.055, GBP: 1750, SGD: 1030, THB: 38, IDR: 0.088 },
   scenarios: {},
   lastVerified: '2026-02-13 09:00',
   changes: [],
-  randomSamples: [
-    { age: '52', job: '은퇴', start: '싱가포르', goal: '포르투갈' },
-    { age: '45', job: '프리랜서', start: '부산', goal: '발리' },
-    { age: '53', job: '가장', start: '의정부', goal: '강남' },
-    { age: '38', job: '워케이션', start: '도쿄', goal: '호주' },
-  ],
+  randomSamples: RANDOM_SAMPLES_BY_LANG.ko, // Default to Korean
   essays: [] // Initialize empty array for dry columnist essays
 };

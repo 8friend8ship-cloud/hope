@@ -599,7 +599,8 @@ const AIDashboardHome: React.FC<{
         setProcessingEssayIndex(index);
         addLog(`✒️ 칼럼 집필 중...`);
         try {
-            const generated = await generateNewEssay(item.topic, item.context);
+            // Note: In admin dashboard, we default to Korean ('ko') for now as it's the admin language
+            const generated = await generateNewEssay(item.topic, item.context, 'ko');
             if (generated.title && generated.content) {
                 const newEssay: StandaloneEssay = {
                     id: `essay_ai_${Date.now()}`,

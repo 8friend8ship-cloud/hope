@@ -20,27 +20,47 @@ export const downloadPDFElement = async (elementId: string, fileName: string) =>
   if (!element) return;
 
   try {
+    // 1. Capture the element
     const canvas = await html2canvas(element, {
       scale: 2,
       backgroundColor: '#1e293b',
       useCORS: true,
-      logging: false
+      logging: false,
+      allowTaint: true,
     });
 
     const imgData = canvas.toDataURL('image/png');
+    
+    // 2. Initialize PDF (A4)
     const pdf = new jsPDF({
       orientation: 'portrait',
       unit: 'mm',
       format: 'a4'
     });
 
-    const pdfWidth = pdf.internal.pageSize.getWidth();
-    const pdfHeight = (canvas.height * pdfWidth) / canvas.width;
+    const imgWidth = 210; // A4 width in mm
+    const pageHeight = 297; // A4 height in mm
+    const imgHeight = (canvas.height * imgWidth) / canvas.width;
+    
+    let heightLeft = imgHeight;
+    let position = 0;
 
-    pdf.addImage(imgData, 'PNG', 0, 0, pdfWidth, pdfHeight);
+    // 3. Add first page
+    pdf.addImage(imgData, 'PNG', 0, position, imgWidth, imgHeight);
+    heightLeft -= pageHeight;
+
+    // 4. Add subsequent pages if content overflows
+    while (heightLeft > 0) {
+      position = heightLeft - imgHeight;
+      pdf.addPage();
+      pdf.addImage(imgData, 'PNG', 0, position, imgWidth, imgHeight);
+      heightLeft -= pageHeight;
+    }
+
     pdf.save(`${fileName}.pdf`);
   } catch (error) {
     console.error('Failed to download PDF:', error);
+    alert("PDF 저장 중 오류가 발생했습니다. 다시 시도해주세요.");
   }
 };
 
@@ -68,14 +88,14 @@ const ColumnArchiveModal: React.FC<{
                 
                 <div className="p-6 border-b border-white/10">
                     <h3 className="text-xl font-bold text-white flex items-center gap-2">
-                        <span>📚</span> {t.columnTitle}
+                        <span>📚</span> {t.columnLib}
                     </h3>
                     <p className="text-sm text-gray-400 mt-1">
                         Total {essays.length} articles archived.
                     </p>
                 </div>
 
-                <div className="flex-1 overflow-y-auto p-6 space-y-4">
+                <div className="flex-1 overflow-y-auto p-6 space-y-4 custom-scrollbar">
                     {essays.map((essay) => {
                          // Title Fallback Logic
                          const isDefaultTitle = essay.title === '새로운 칼럼 제목';
@@ -323,6 +343,16 @@ export const ResultSection: React.FC<ResultSectionProps> = ({ result, loading, e
   // Show only Top 5 in the list
   const topPicks = relevantEssays.slice(0, 5);
 
+  const handleActionClick = (label: string, value: string) => {
+    const isYoutube = label.toLowerCase().includes('youtube');
+    const query = encodeURIComponent(value);
+    const url = isYoutube 
+        ? `https://www.youtube.com/results?search_query=${query}`
+        : `https://www.google.com/search?q=${query}`;
+    
+    window.open(url, '_blank');
+  };
+
   if (loading) {
     return (
       <GlassCard className="p-8 md:p-12 text-center min-h-[600px] flex flex-col items-center justify-center space-y-6 animate-pulse border-white/5 h-full">
@@ -442,9 +472,16 @@ export const ResultSection: React.FC<ResultSectionProps> = ({ result, loading, e
                 <h4 className="text-sm font-bold text-gray-400 mb-4 uppercase tracking-wider">{t.actionPlan}</h4>
                 <div className="space-y-3">
                     {scenarioData.additionalInfo.nextSteps.map((step, idx) => (
-                        <div key={idx} className="p-3 bg-black/20 rounded-lg text-sm text-gray-300 flex items-center gap-3 hover:bg-black/30 cursor-pointer transition-colors border border-white/5 hover:border-emerald-500/30">
-                            <span className="font-bold text-emerald-500 min-w-[80px]">[{step.label}]</span>
-                            <span className="truncate">{step.value}</span>
+                        <div 
+                            key={idx} 
+                            onClick={() => handleActionClick(step.label, step.value)}
+                            className="p-3 bg-black/20 rounded-lg text-sm text-gray-300 flex items-center gap-3 hover:bg-black/30 cursor-pointer transition-all border border-white/5 hover:border-emerald-500/50 hover:shadow-lg hover:shadow-emerald-900/20 active:scale-95 group"
+                        >
+                            <span className={`font-bold min-w-[80px] ${step.label.toLowerCase().includes('youtube') ? 'text-red-400' : 'text-emerald-500'}`}>
+                                [{step.label}]
+                            </span>
+                            <span className="truncate flex-1 group-hover:text-white transition-colors">{step.value}</span>
+                            <span className="text-xs text-gray-500 group-hover:text-emerald-400 transition-colors">↗</span>
                         </div>
                     ))}
                 </div>
@@ -516,11 +553,11 @@ export const ResultSection: React.FC<ResultSectionProps> = ({ result, loading, e
                          </div>
                          
                          {/* Recommended Columns List */}
-                         {topPicks.length > 0 && (
+                         {extraEssays && extraEssays.length > 0 && (
                             <div className="mt-8 bg-gray-50 border border-gray-200 rounded-lg p-5 text-left">
                                 <div className="flex justify-between items-center mb-4">
                                     <h5 className="font-bold text-sm text-gray-500 uppercase flex items-center gap-2">
-                                        <span>📚</span> Recommended (TOP 5)
+                                        <span>📚</span> Recommended
                                     </h5>
                                 </div>
                                 <div className="space-y-3">
@@ -553,6 +590,14 @@ export const ResultSection: React.FC<ResultSectionProps> = ({ result, loading, e
                                         </div>
                                     )})}
                                 </div>
+                                
+                                {/* VIEW ALL BUTTON */}
+                                <button 
+                                    onClick={() => setIsArchiveOpen(true)}
+                                    className="w-full mt-4 py-2 bg-gray-200 hover:bg-gray-300 rounded text-xs font-bold text-gray-600 transition-colors flex items-center justify-center gap-1"
+                                >
+                                    <span>📚</span> {t.columnLib}
+                                </button>
                             </div>
                          )}
                       </div>

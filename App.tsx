@@ -7,10 +7,10 @@ import { AdBanner } from './components/AdBanner';
 import { ActionButtons } from './components/ActionButtons';
 import { Toast } from './components/Toast';
 import { AdminDashboard } from './components/AdminDashboard';
-import { INITIAL_DB, GLOBAL_100, detectCountry, DEFAULT_TEMPLATES } from './constants';
+import { INITIAL_DB, GLOBAL_100, detectCountry, DEFAULT_TEMPLATES, RANDOM_SAMPLES_BY_LANG } from './constants';
 import { UserInput, StoryResult, ScenarioDB, ScenarioData, ScenarioTemplate, ComparisonRow, EssayData, DownloadableResource, Language } from './types';
 import { GlassCard } from './components/GlassCard';
-import { generateNewScenarioTemplate, parseUserPrompt, hasApiKey } from './aiService';
+import { generateNewScenarioTemplate, parseUserPrompt, hasApiKey, translateKeywords } from './aiService';
 import { UI_TEXT } from './translations';
 
 function App() {
@@ -153,6 +153,22 @@ function App() {
         const forceAI = generationInput.useAI || (language !== 'ko' && hasApiKey());
         const isDefaultScenario = countryKey === 'default' && !generationInput.forcedTemplateId && !forceAI;
 
+        // [TRANSLATION FIX] If language is not Korean, translate the input keywords first
+        let translatedStart = start;
+        let translatedGoal = goal;
+        let translatedJob = job;
+
+        if (language !== 'ko' && hasApiKey()) {
+            try {
+                const translated = await translateKeywords({ start, goal, job }, language);
+                translatedStart = translated.start;
+                translatedGoal = translated.goal;
+                translatedJob = translated.job;
+            } catch (e) {
+                console.warn("Keyword translation failed");
+            }
+        }
+
         // 2. Select Template Logic
         let selectedTemplate: ScenarioTemplate | null = null;
         let usedAI = false;
@@ -161,7 +177,15 @@ function App() {
         if (forceAI && hasApiKey()) {
             setAiGenerating(true);
             try {
-            const aiTemplate = await generateNewScenarioTemplate(generationInput, language);
+            // Use translated inputs for AI generation context if available
+            const aiInput = { 
+                ...generationInput, 
+                start: translatedStart, 
+                goal: translatedGoal, 
+                job: translatedJob 
+            };
+            
+            const aiTemplate = await generateNewScenarioTemplate(aiInput, language);
             if (aiTemplate) {
                 selectedTemplate = aiTemplate;
                 // Only save to templates if it's in default language (KO), otherwise just use it once
@@ -221,24 +245,52 @@ function App() {
         
         // Final Safe Fallback
         if (!selectedTemplate) {
-        selectedTemplate = templates.find(t => t.id === 'template_default') || templates[0];
+            if (language === 'ko') {
+                selectedTemplate = templates.find(t => t.id === 'template_default') || templates[0];
+            } else {
+                // For non-Korean languages, try to find the English default template
+                selectedTemplate = templates.find(t => t.id === 'template_default_en') || 
+                                   DEFAULT_TEMPLATES.find(t => t.id === 'template_default_en') || 
+                                   templates[0];
+            }
         }
 
         // 3. Inject Variables
         const inject = (text?: string) => {
         if (!text) return "";
-        return text
+        
+        // Basic injection - USE TRANSLATED VALUES
+        let injected = text
             .replace(/{age}/g, age)
-            .replace(/{job}/g, job)
-            .replace(/{start}/g, start)
-            .replace(/{goal}/g, goal)
+            .replace(/{job}/g, translatedJob)
+            .replace(/{start}/g, translatedStart)
+            .replace(/{goal}/g, translatedGoal)
             .replace(/{months}/g, months.toString())
-            .replace(/{currency}/g, config.currency)
-            .replace(/{prop}/g, config.prop)
-            .replace(/{bank}/g, config.bank)
-            .replace(/{visa}/g, config.visaName)
             .replace(/{family}/g, generationInput.family || 'Family')
             .replace(/{moveType}/g, generationInput.moveType || 'Move');
+
+        // Only inject language-specific constants if they are safe or if we are in Korean
+        // Or if the template is the default English one, we might want to avoid Korean constants
+        if (language === 'ko') {
+             injected = injected
+                .replace(/{currency}/g, config.currency)
+                .replace(/{prop}/g, config.prop)
+                .replace(/{bank}/g, config.bank)
+                .replace(/{visa}/g, config.visaName);
+        } else {
+             // For non-Korean, we try to use the config values, but some might be Korean (like visaName).
+             // Ideally, we should have English values in config, but for now, let's just use them
+             // and hope the user understands or the AI generated template didn't use these specific placeholders.
+             // If the template is 'template_default_en', it doesn't use {visa} in the text body, only in the logic if needed.
+             // But let's replace them anyway to prevent {visa} from showing up raw.
+             injected = injected
+                .replace(/{currency}/g, config.currency)
+                .replace(/{prop}/g, config.prop)
+                .replace(/{bank}/g, config.bank)
+                .replace(/{visa}/g, config.visaName);
+        }
+        
+        return injected;
         };
 
         const randInt = (min: number, max: number) => Math.floor(Math.random() * (max - min + 1)) + min;
@@ -315,9 +367,9 @@ function App() {
             additionalInfo: {
                 obstacles: ['Regulation', 'Exchange Rate', 'Language'],
                 nextSteps: [
-                    { label: 'Google', value: `${start} expat in ${goal} visa` },
-                    { label: 'YouTube', value: `${goal} cost of living vlog` },
-                    { label: 'Guide', value: `${goal} settlement guide PDF` }
+                    { label: 'Google', value: `${translatedStart} expat in ${translatedGoal} visa` },
+                    { label: 'YouTube', value: `${translatedGoal} cost of living vlog` },
+                    { label: 'Guide', value: `${translatedGoal} settlement guide PDF` }
                 ]
             },
             essay: essayData,
@@ -380,7 +432,10 @@ function App() {
 
   const handleRandom = () => {
     // Safety check: ensure randomSamples is array
-    const samples = Array.isArray(db.randomSamples) ? db.randomSamples : [];
+    // [LANG FIX] Use language-specific samples if available, otherwise fallback to DB or English
+    const langSamples = RANDOM_SAMPLES_BY_LANG[language] || RANDOM_SAMPLES_BY_LANG['en'] || db.randomSamples;
+    const samples = Array.isArray(langSamples) ? langSamples : [];
+    
     if (samples.length === 0) {
       setToastMessage("🎲 No examples found. Resetting...");
       setDb(prev => ({...prev, randomSamples: INITIAL_DB.randomSamples}));
@@ -454,6 +509,7 @@ function App() {
                       onRandom={handleRandom}
                       onRefresh={() => window.location.reload()}
                       onReward={() => {}} 
+                      language={language}
                     />
                     <AdBanner />
                 </div>
@@ -519,6 +575,7 @@ function App() {
                       onRandom={handleRandom}
                       onRefresh={() => window.location.reload()}
                       onReward={() => {}} 
+                      language={language}
                     />
                 </div>
             </div>

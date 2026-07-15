@@ -182,7 +182,7 @@ export const generateBatchRandomSamples = async (count: number): Promise<Partial
       config: {
         responseMimeType: "application/json",
         responseSchema: schema,
-        temperature: 0.8,
+        temperature: 0.6, // Lowered for stability
       }
     }), 90000);
     
@@ -234,7 +234,7 @@ export const suggestNewScenarioTopics = async (existingTags: string[], count: nu
       config: {
         responseMimeType: "application/json",
         responseSchema: schema,
-        temperature: 0.7,
+        temperature: 0.5, // Lowered for stability
       }
     }), 90000);
 
@@ -278,7 +278,7 @@ export const suggestNewEssayTopics = async (existingTitles: string[], count: num
       config: {
         responseMimeType: "application/json",
         responseSchema: schema,
-        temperature: 0.8,
+        temperature: 0.7,
       }
     }), 60000);
 
@@ -293,10 +293,16 @@ export const suggestNewEssayTopics = async (existingTitles: string[], count: num
 /**
  * AI Essay Generator: Writes the full essay content
  */
-export const generateNewEssay = async (topic: string, context: string): Promise<Partial<StandaloneEssay>> => {
+export const generateNewEssay = async (topic: string, context: string, language: Language = 'ko'): Promise<Partial<StandaloneEssay>> => {
   try {
     const ai = getGenAI();
     if (!ai) throw new Error("API Key Missing");
+
+    const langName = { 
+        ko: 'Korean', en: 'English', jp: 'Japanese', cn: 'Chinese (Simplified)',
+        es: 'Spanish', fr: 'French', de: 'German', ru: 'Russian', 
+        vn: 'Vietnamese', th: 'Thai', id: 'Indonesian'
+    }[language] || 'Korean';
 
     const prompt = `
       Write a short, powerful column (essay) for a platform called "Hope Purchase".
@@ -312,7 +318,8 @@ export const generateNewEssay = async (topic: string, context: string): Promise<
         2. Present the uncomfortable reality (financial/mental).
         3. A cold conclusion.
       
-      Language: Korean (High-quality, literary but cold tone).
+      Language: **${langName}** (${language})
+      **CRITICAL**: Output MUST be in ${langName} ONLY.
     `;
 
     const schema = {
@@ -331,7 +338,7 @@ export const generateNewEssay = async (topic: string, context: string): Promise<
       config: {
         responseMimeType: "application/json",
         responseSchema: schema,
-        temperature: 0.7,
+        temperature: 0.6, // Lowered
       }
     }), 90000); // 90s timeout for creative writing
 
@@ -389,7 +396,65 @@ export const validateSystemData = async (db: ScenarioDB, templates: ScenarioTemp
   }
 }
 
+// ... existing imports ...
+
+/**
+ * AI Translator: Translates key context words (Start, Goal, Job) to target language
+ */
+export const translateKeywords = async (keywords: { start: string, goal: string, job: string }, targetLang: Language): Promise<{ start: string, goal: string, job: string }> => {
+    try {
+        const ai = getGenAI();
+        if (!ai) return keywords; // Return original if no key
+
+        const langName = { 
+            ko: 'Korean', en: 'English', jp: 'Japanese', cn: 'Chinese (Simplified)',
+            es: 'Spanish', fr: 'French', de: 'German', ru: 'Russian', 
+            vn: 'Vietnamese', th: 'Thai', id: 'Indonesian'
+        }[targetLang] || 'English';
+
+        const prompt = `
+          Translate the following 3 terms into ${langName}.
+          1. "${keywords.start}" (Location)
+          2. "${keywords.goal}" (Location)
+          3. "${keywords.job}" (Job Title)
+          
+          Return JSON: { "start": "...", "goal": "...", "job": "..." }
+          Only return the translated terms.
+        `;
+
+        const response = await withTimeout<GenerateContentResponse>(ai.models.generateContent({
+            model: 'gemini-3-flash-preview',
+            contents: prompt,
+            config: {
+                responseMimeType: "application/json",
+                responseSchema: {
+                    type: Type.OBJECT,
+                    properties: {
+                        start: { type: Type.STRING },
+                        goal: { type: Type.STRING },
+                        job: { type: Type.STRING }
+                    }
+                }
+            }
+        }), 10000); // Fast timeout
+
+        let text = response.text || "{}";
+        text = text.replace(/```json\n?/g, '').replace(/```/g, '').trim();
+        const result = JSON.parse(text);
+        
+        return {
+            start: result.start || keywords.start,
+            goal: result.goal || keywords.goal,
+            job: result.job || keywords.job
+        };
+    } catch (e) {
+        console.warn("Translation failed, using original:", e);
+        return keywords;
+    }
+};
+
 export const generateNewScenarioTemplate = async (input: UserInput, language: Language = 'ko'): Promise<ScenarioTemplate | null> => {
+// ... existing code ...
   try {
     const ai = getGenAI();
     if (!ai) throw new Error("API Key Missing");
@@ -437,20 +502,26 @@ export const generateNewScenarioTemplate = async (input: UserInput, language: La
       CRITICAL INSTRUCTIONS:
       1. **Tone**: Cynical, Analytical, Hyper-Realistic. Highlight "Hidden Costs" (Mental & Financial).
       2. **Variables**: The output MUST be a generic template using placeholders: {age}, {job}, {start}, {goal}, {months}, {currency}, {family}.
-         - Even if the user input specific values, replace them with placeholders in the template text where appropriate so it can be reused.
-         - However, keep specific local facts hardcoded (e.g. "Gangnam traffic", "Jeju wind", "Vancouver rain").
+         - Use placeholders naturally in the text.
+         - Do NOT use specific numbers (like $4000) unless it's a fixed fact about the city. Use generic terms or placeholders.
       
       3. **Structure Requirement (EXACTLY 4 STAGES)**:
          - Stage 1 Label: "Day 1" (The Honeymoon/Investment)
          - Stage 2 Label: "Month 6" (The First Failure/Reality Check)
          - Stage 3 Label: "Month 12~18" (The Deep Crisis/Infrastructure Gap)
          - Stage 4 Label: "Month ${input.months}" (Final Result/Adaptation or Return)
-         
-      4. **Result Table**: 4 Key metrics comparing Start vs Goal (e.g., Cost of Living, Assets, Quality of Life).
-      5. **Essay**: A sharp, 3-paragraph critique of the user's desire to move to ${input.goal}.
-      6. **Downloads**: 2 specific tools (PDF/Excel) relevant to the move type.
       
-      7. **LANGUAGE**: GENERATE ALL CONTENT IN ${langName} (${language}).
+      4. **Content Rules**:
+         - **NO REPETITION**: Do not repeat the same phrase over and over.
+         - **CONCISE**: Each situation/thought/action must be under 3 sentences.
+         - **REALISM**: No happy endings. Focus on the trade-offs.
+         
+      5. **Result Table**: 4 Key metrics comparing Start vs Goal.
+      6. **Essay**: A sharp, 3-paragraph critique.
+      7. **Downloads**: 2 specific tools (PDF/Excel).
+      
+      8. **LANGUAGE**: GENERATE ALL CONTENT IN **${langName}** (${language}).
+         - Title, Stages, Essay, Table MUST BE in ${langName}.
 
       RETURN PURE JSON ONLY. NO MARKDOWN.
     `;
@@ -472,7 +543,7 @@ export const generateNewScenarioTemplate = async (input: UserInput, language: La
             subTemplate: { type: Type.STRING, description: "Subtitle (e.g., '{family}의 {months}개월 정착 시뮬레이션')" },
             stages: {
               type: Type.ARRAY,
-              description: "EXACTLY 4 stages of the simulation (Day 1, Early Fail, Mid Crisis, Final Result)",
+              description: "EXACTLY 4 stages. Each stage MUST have content.",
               items: {
                 type: Type.OBJECT,
                 properties: {
@@ -490,12 +561,15 @@ export const generateNewScenarioTemplate = async (input: UserInput, language: La
                       solution: { type: Type.STRING, nullable: true },
                       result: { type: Type.STRING, nullable: true },
                       reality: { type: Type.STRING, nullable: true },
-                    }
+                    },
+                    required: [] // Allow flexible content but urge strict schema adherence
                   }
-                }
+                },
+                required: ["label", "title", "content"]
               }
             }
-          }
+          },
+          required: ["titleTemplate", "subTemplate", "stages"]
         },
         resultTable: {
           type: Type.ARRAY,
@@ -506,7 +580,8 @@ export const generateNewScenarioTemplate = async (input: UserInput, language: La
               before: { type: Type.STRING },
               after: { type: Type.STRING },
               diff: { type: Type.STRING }
-            }
+            },
+            required: ["item", "before", "after", "diff"]
           }
         },
         essay: {
@@ -515,7 +590,8 @@ export const generateNewScenarioTemplate = async (input: UserInput, language: La
             title: { type: Type.STRING },
             intro: { type: Type.STRING },
             body: { type: Type.STRING }
-          }
+          },
+          required: ["title", "intro", "body"]
         },
         downloads: {
             type: Type.ARRAY,
@@ -527,7 +603,8 @@ export const generateNewScenarioTemplate = async (input: UserInput, language: La
                     type: { type: Type.STRING, enum: ["pdf", "excel", "doc"] },
                     triggerType: { type: Type.STRING, enum: ["ad", "link"] },
                     triggerUrl: { type: Type.STRING, nullable: true }
-                }
+                },
+                required: ["title", "description", "type", "triggerType"]
             }
         }
       },
@@ -541,7 +618,7 @@ export const generateNewScenarioTemplate = async (input: UserInput, language: La
       config: {
         responseMimeType: "application/json",
         responseSchema: schema,
-        temperature: 0.7, 
+        temperature: 0.3, // DRASTICALLY LOWERED for stability (prevent loops)
       }
     }), 120000);
 
