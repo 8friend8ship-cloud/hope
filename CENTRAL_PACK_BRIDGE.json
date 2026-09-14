@@ -1,0 +1,1 @@
+{"schema":"central-pack-bridge/v1","repo":"8friend8ship-cloud/hope","inherits":"8friend8ship-cloud/contents-os-git:CENTRAL_PACK_BRIDGE.json","required_route":["CENTRAL_AGENT","QUEENS","SEED_QA","TEMPLATE","WORKFLOW_MAP","SUPPORT_PACK_ROUTER","T1","APP_T2","RUNTIME","READBACK"],"app_domain":"COMMERCE","status":"REGISTERED;RUNTIME_BIND_PENDING"}
