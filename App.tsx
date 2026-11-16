@@ -80,7 +80,6 @@ function App() {
 
   const [isAdmin, setIsAdmin] = useState(false);
   const [showAdminLogin, setShowAdminLogin] = useState(false);
-  const [adminPassword, setAdminPassword] = useState('');
   const [language, setLanguage] = useState<Language>('ko');
 
   const [input, setInput] = useState<UserInput>({
@@ -119,16 +118,6 @@ function App() {
         localStorage.setItem('app_templates', JSON.stringify(templates));
     }
   }, [templates]);
-
-  const handleAdminLogin = () => {
-    if (adminPassword === '1234') {
-      setIsAdmin(true);
-      setShowAdminLogin(false);
-      setToastMessage("🔓 관리자 모드로 접속했습니다.");
-    } else {
-      alert("비밀번호가 올바르지 않습니다.");
-    }
-  };
 
   const handleInputChange = (field: keyof UserInput, value: string | number) => {
     setInput(prev => ({ ...prev, [field]: value }));
@@ -588,19 +577,11 @@ function App() {
           <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-md p-6">
             <GlassCard className="p-8 w-full max-w-sm text-center space-y-6 border border-white/20">
               <h2 className="text-2xl font-bold bg-gradient-to-r from-white to-gray-400 bg-clip-text text-transparent">System Access</h2>
-              <input 
-                type="password" 
-                value={adminPassword}
-                onChange={(e) => setAdminPassword(e.target.value)}
-                onKeyDown={(e) => e.key === 'Enter' && handleAdminLogin()}
-                className="w-full p-4 bg-white/5 rounded-xl text-center text-xl font-bold border border-white/10 focus:border-emerald-500 focus:outline-none transition-colors"
-                placeholder="Passcode"
-                autoFocus
-              />
-              <div className="flex gap-4">
-                <button onClick={() => setShowAdminLogin(false)} className="flex-1 py-3 bg-gray-700/50 hover:bg-gray-700 rounded-xl transition-colors font-medium">Cancel</button>
-                <button onClick={handleAdminLogin} className="flex-1 py-3 bg-emerald-600 hover:bg-emerald-500 rounded-xl transition-colors font-bold shadow-lg shadow-emerald-900/50">Enter</button>
-              </div>
+              <p role="status" className="text-sm text-amber-200 leading-relaxed">
+                관리자 기능은 서버 인증 및 소유자 검증이 완료될 때까지 잠겨 있습니다.
+                브라우저에서 입력한 암호만으로 관리자 권한을 부여하지 않습니다.
+              </p>
+              <button onClick={() => setShowAdminLogin(false)} className="w-full py-3 bg-gray-700/50 hover:bg-gray-700 rounded-xl transition-colors font-medium">Close</button>
             </GlassCard>
           </div>
       )}
