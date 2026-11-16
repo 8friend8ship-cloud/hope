@@ -1,0 +1,12 @@
+{
+  "version":"FRONT_REQUIREMENT_REVERSE_FACTORY_V1_20260823",
+  "appIds":["APP_HOPE"],
+  "controlTargetId":"FPC_KFOOD_20260823",
+  "cycleMinutes":10,
+  "role":"support scenario/report module; consume approved KFood/project T1/T2 and create report/PDF outputs only, no independent commerce data collection",
+  "pipeline":["CENTRAL_FACTORY_REQUEST","CANONICAL_PROJECT_OR_KFOOD_CONSUME","REPORT_T1","PDF_T2","OUTPUT_POINTER","CENTRAL_REINGEST"],
+  "qualityGate":{"canonicalDataOnly":true,"noInventedCommerceValues":true,"exportReadbackCount":2},
+  "storage":{"report":"DRIVE_URL_OR_EXPORT_POINTER","data":"CANONICAL_ID_POINTER"},
+  "physicalTriggerPolicy":"REUSE_PARENT_WAKE_NO_DUPLICATE",
+  "approvalBoundary":["PUBLIC_EXTERNAL_SEND","NEW_PAID_API_OR_SERVICE","PAYMENT","DESTRUCTIVE_DELETE"]
+}
