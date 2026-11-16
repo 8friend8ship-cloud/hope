@@ -282,7 +282,7 @@ function App() {
         return injected;
         };
 
-        const randInt = (min: number, max: number) => Math.floor(Math.random() * (max - min + 1)) + min;
+        // Do not invent financial or immigration probabilities from randomness.
         
         // 4. Generate Result Table
         let resultTable: ComparisonRow[] = [];
@@ -296,10 +296,10 @@ function App() {
         }));
         } else {
         resultTable = [
-            { item: 'Cost of Living', before: `${config.currency} 4,500`, after: `${config.currency} 3,200`, diff: `-1,300` },
-            { item: 'Assets', before: 'Low Liquidity', after: 'Gain', diff: `+${randInt(1, 15)}%` },
-            { item: 'Health Cost', before: 'Insured', after: 'Private', diff: '+200%' },
-            { item: 'Savings', before: '100', after: '350', diff: '+250' }
+            { item: 'Cost of Living', before: 'UNVERIFIED', after: 'UNVERIFIED', diff: 'N/A' },
+            { item: 'Assets', before: 'UNVERIFIED', after: 'UNVERIFIED', diff: 'N/A' },
+            { item: 'Health Cost', before: 'UNVERIFIED', after: 'UNVERIFIED', diff: 'N/A' },
+            { item: 'Savings', before: 'UNVERIFIED', after: 'UNVERIFIED', diff: 'N/A' }
         ];
         }
 
@@ -325,10 +325,10 @@ function App() {
         })) : [];
 
         const scenarioData: ScenarioData = {
-            success: randInt(40, 95),
+            success: null, // No verified official success-probability evidence
             salary: config.avgSalary,
             visa: config.visaName,
-            living: randInt(100, 450), 
+            living: null, // No verified country/date-specific cost evidence
             story: {
                 header: inject(selectedTemplate.story.titleTemplate),
                 subHeader: inject(selectedTemplate.story.subTemplate),
@@ -367,7 +367,7 @@ function App() {
         };
 
         const title = scenarioData.story.header;
-        const progress = randInt(50, 92);
+        const progress = 0; // Do not fabricate applicant progress
 
         const newResult: StoryResult = {
         title,
