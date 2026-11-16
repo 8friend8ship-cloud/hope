@@ -460,8 +460,11 @@ export const ResultSection: React.FC<ResultSectionProps> = ({ result, loading, e
         <div className="mt-8 grid grid-cols-1 md:grid-cols-2 gap-6">
             <div className="p-6 bg-white/5 rounded-2xl border border-white/5 text-center flex flex-col justify-center">
                 <div className="text-sm text-gray-400 mb-1 uppercase tracking-wider">{t.successRate}</div>
-                <div className="text-4xl font-black text-white mb-2">
-                    {scenarioData.success}%
+                <div className="text-4xl font-black text-white mb-2" aria-label="Official success probability unavailable">
+                    N/A
+                </div>
+                <div className="text-xs text-amber-300 mb-2">
+                    공식 성공률 미확인 · Not an official probability
                 </div>
                 <div className="text-xs text-gray-500">
                     {t.failFactor}: {scenarioData.additionalInfo.obstacles.join(' + ')}
