@@ -36,10 +36,10 @@ export interface DownloadableResource {
 }
 
 export interface ScenarioData {
-  success: number;
+  success: number | null;
   salary: string;
   visa: string;
-  living: number;
+  living: number | null;
   story: {
     header: string;
     subHeader: string;
